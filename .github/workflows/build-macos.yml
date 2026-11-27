@@ -45,20 +45,25 @@ jobs:
           DYLD_LIBRARY_PATH="$(pwd)/Frameworks/sherpa-onnx.xcframework/macos-arm64_x86_64" \
             swift test --verbose
 
-      - name: Build Universal2 release binary (Apple Silicon arm64 + Intel x86_64)
+      - name: Build Universal2 release binaries (Apple Silicon arm64 + Intel x86_64)
         working-directory: macos
-        run: swift build -c release --arch arm64 --arch x86_64
+        run: |
+          set -euo pipefail
+          swift build -c release --arch arm64
+          swift build -c release --arch x86_64
 
       - name: Package PreSalesCopilot.app bundle, ZIP & DMG (Universal2)
         working-directory: macos
         run: |
           set -euo pipefail
-          BIN_PATH="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/PreSalesCopilot"
+          ARM_BIN="$(swift build -c release --arch arm64 --show-bin-path)/PreSalesCopilot"
+          X64_BIN="$(swift build -c release --arch x86_64 --show-bin-path)/PreSalesCopilot"
           APP_DIR="dist/PreSalesCopilot.app"
           rm -rf dist
           mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources" "${APP_DIR}/Contents/Frameworks"
 
-          cp "${BIN_PATH}" "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
+          # Combine arm64 + x86_64 slices into a single Universal2 executable
+          lipo -create "${ARM_BIN}" "${X64_BIN}" -output "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
           chmod +x "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
 
           # Embed full Universal2 (arm64 + x86_64) libsherpa-onnx-c-api.dylib (with static ONNX Runtime inside)
