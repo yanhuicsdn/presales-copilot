@@ -35,10 +35,10 @@ function makeSeg(seq: number, text: string): TranscriptSegment {
   };
 }
 
-describe('Methodology: 7 Principles, 9 Skills & S0-S5 State Machine', () => {
-  it('defines all 7 principles, 9 skills, and 6 ordered stages S0-S5', () => {
-    expect(SEVEN_COMMUNICATION_PRINCIPLES).toHaveLength(7);
-    expect(NINE_SKILLS).toHaveLength(9);
+describe('Methodology V3.0: 10 FDE Principles, 12 Skills & S0-S5 State Machine', () => {
+  it('defines all 10 FDE principles, 12 skills, and 6 ordered stages S0-S5', () => {
+    expect(SEVEN_COMMUNICATION_PRINCIPLES).toHaveLength(10);
+    expect(NINE_SKILLS).toHaveLength(12);
     expect(STAGE_ORDER).toEqual(['S0', 'S1', 'S2', 'S3', 'S4', 'S5']);
     for (const stage of STAGE_ORDER) {
       expect(STAGE_DEFINITIONS[stage].allowedSkills.length).toBeGreaterThan(0);
@@ -183,5 +183,46 @@ describe('Methodology: 7 Principles, 9 Skills & S0-S5 State Machine', () => {
     expect(gen.alternativeQuestions.length).toBeGreaterThanOrEqual(2);
     expect(gen.alternativeQuestions.length).toBeLessThanOrEqual(4);
     expect(gen.primaryQuestion).toContain('发动机');
+  });
+
+  it('triggers ai_vs_engineering_triage on routine diff/timeout or single-turn OCR problems in S2', () => {
+    const cp = { ...createInitialCheckpoint('grp_test'), currentStage: 'S2' as const };
+    const segs = [
+      makeSeg(1, '资产滚动盘点总是重复推送没有变化的数据，接口还经常60秒超时。'),
+    ];
+    const analysis = deterministicAnalyze(segs, cp);
+    expect(analysis.rootCauseIdentified).toBe('engineering');
+    expect(analysis.needsEngineeringTriage).toBe(true);
+    expect(analysis.extractedBoundaries.systemConstraints).toBeTruthy();
+
+    // Even when root cause is identified, check triage routing in S2 or S5
+    const cpS5 = { ...createInitialCheckpoint('grp_test'), currentStage: 'S5' as const };
+    const routedS5 = routeStrategy('S5', analysis, cpS5.boundaries);
+    expect(routedS5.matchedSkills).toContain('ai_vs_engineering_triage');
+  });
+
+  it('triggers honest_boundary_defer on messy ontology / cross-industry graph demands', () => {
+    const cp = { ...createInitialCheckpoint('grp_test'), currentStage: 'S4' as const };
+    const segs = [
+      makeSeg(1, '我们有18000条历史地址字段混乱，二栋几零几写法都不统一，还想顺便做产业图谱。'),
+    ];
+    const analysis = deterministicAnalyze(segs, cp);
+    expect(analysis.needsHonestDefer).toBe(true);
+
+    const routed = routeStrategy('S4', analysis, cp.boundaries);
+    expect(routed.matchedSkills).toContain('honest_boundary_defer');
+  });
+
+  it('triggers prototype_and_sample_anchor when customer worries about rework or lack of training data', () => {
+    const cp = { ...createInitialCheckpoint('grp_test'), currentStage: 'S3' as const };
+    const segs = [
+      makeSeg(1, '我们不想推倒重来，而且审计是一案一例没有训练数据，怎么验证效果？'),
+    ];
+    const analysis = deterministicAnalyze(segs, cp);
+    expect(analysis.needsSampleAnchor).toBe(true);
+    expect(analysis.extractedBoundaries.historicalDataStatus).toBeTruthy();
+
+    const routed = routeStrategy('S3', analysis, cp.boundaries);
+    expect(routed.matchedSkills).toContain('prototype_and_sample_anchor');
   });
 });

@@ -30,12 +30,24 @@ const skillIdSchema = z.enum([
   'interrupt_solution_first',
   'scene_restoration_probe',
   'root_cause_distinction',
+  'ai_vs_engineering_triage',
   'boundary_constraints_confirm',
   'paraphrase_loop_confirm',
   'vague_demand_redirect',
   'pain_point_convergence',
+  'honest_boundary_defer',
   'tech_concept_translation',
+  'prototype_and_sample_anchor',
   'stage_progression_control',
+]);
+
+const rootCauseSchema = z.enum([
+  'people',
+  'system',
+  'process',
+  'engineering',
+  'ai_architecture',
+  'unknown',
 ]);
 
 const analysisOutputSchema = z.object({
@@ -47,8 +59,11 @@ const analysisOutputSchema = z.object({
   contradictionDetail: z.string().optional(),
   emotion: z.enum(['positive', 'neutral', 'frustrated', 'skeptical', 'anxious']),
   painPointClarity: z.number().min(0).max(100),
-  rootCauseIdentified: z.enum(['people', 'system', 'process', 'unknown']),
+  rootCauseIdentified: rootCauseSchema,
   vagueGrandDemand: z.boolean(),
+  needsEngineeringTriage: z.boolean().optional(),
+  needsHonestDefer: z.boolean().optional(),
+  needsSampleAnchor: z.boolean().optional(),
   needsTechTranslation: z.boolean(),
   stageGoalMet: z.boolean(),
   customerAgreedToAdvance: z.boolean(),
@@ -56,7 +71,7 @@ const analysisOutputSchema = z.object({
     z.object({
       title: z.string(),
       description: z.string(),
-      rootCauseCategory: z.enum(['people', 'system', 'process', 'unknown']),
+      rootCauseCategory: rootCauseSchema,
     })
   ),
   extractedBoundaries: z.object({
@@ -65,6 +80,8 @@ const analysisOutputSchema = z.object({
     dataVolume: z.string().nullable().optional(),
     terminalType: z.string().nullable().optional(),
     confidentiality: z.string().nullable().optional(),
+    historicalDataStatus: z.string().nullable().optional(),
+    systemConstraints: z.string().nullable().optional(),
   }),
   summaryDelta: z.string(),
 });
@@ -170,12 +187,19 @@ ${inputData.formattedPromptContext}
           const obj = response.object;
           finalAnalysis = {
             ...obj,
+            needsEngineeringTriage: obj.needsEngineeringTriage ?? baseline.needsEngineeringTriage,
+            needsHonestDefer: obj.needsHonestDefer ?? baseline.needsHonestDefer,
+            needsSampleAnchor: obj.needsSampleAnchor ?? baseline.needsSampleAnchor,
             extractedBoundaries: {
               dataLocation: obj.extractedBoundaries.dataLocation ?? baseline.extractedBoundaries.dataLocation,
               networkType: obj.extractedBoundaries.networkType ?? baseline.extractedBoundaries.networkType,
               dataVolume: obj.extractedBoundaries.dataVolume ?? baseline.extractedBoundaries.dataVolume,
               terminalType: obj.extractedBoundaries.terminalType ?? baseline.extractedBoundaries.terminalType,
               confidentiality: obj.extractedBoundaries.confidentiality ?? baseline.extractedBoundaries.confidentiality,
+              historicalDataStatus:
+                obj.extractedBoundaries.historicalDataStatus ?? baseline.extractedBoundaries.historicalDataStatus,
+              systemConstraints:
+                obj.extractedBoundaries.systemConstraints ?? baseline.extractedBoundaries.systemConstraints,
             },
           };
           providerMode = 'deepseek';
@@ -234,6 +258,10 @@ const routeStrategyStep = createStep({
       dataVolume: analysis.extractedBoundaries.dataVolume ?? checkpoint.boundaries.dataVolume,
       terminalType: analysis.extractedBoundaries.terminalType ?? checkpoint.boundaries.terminalType,
       confidentiality: analysis.extractedBoundaries.confidentiality ?? checkpoint.boundaries.confidentiality,
+      historicalDataStatus:
+        analysis.extractedBoundaries.historicalDataStatus ?? checkpoint.boundaries.historicalDataStatus ?? null,
+      systemConstraints:
+        analysis.extractedBoundaries.systemConstraints ?? checkpoint.boundaries.systemConstraints ?? null,
     };
 
     const routed = routeStrategy(checkpoint.currentStage, analysis, mergedBoundaries);
@@ -302,19 +330,20 @@ const generateAndValidateStep = createStep({
             ? `\n上一次自校验未通过，请务必修正以下问题：\n- ${prevValidation.issues.join('\n- ')}`
             : '';
 
-        const prompt = `当前阶段：${nextStage}（${STAGE_DEFINITIONS[nextStage].name}，目标：${STAGE_DEFINITIONS[nextStage].goal}）
-策略路由依据：${inputData.rationale}
+        const prompt = `当前阶段：${nextStage}（${STAGE_DEFINITIONS[nextStage].name}）
 命中 Skill：
 ${skillSummary}
 
-历史已提问（请避免重复）：
-${avoidList.slice(-8).join('\n') || '无'}
+历史已提问（勿重复）：
+${avoidList.slice(-6).join('\n') || '无'}
 
 上下文：
 ${inputData.formattedPromptContext}
 ${feedback}
 
-请生成 1 条可直接照着念的主问题（primaryQuestion）和 3 条不同角度的备选问题（alternativeQuestions）。`;
+请输出极其精炼的提词：
+- primaryQuestion：仅 1 句，严格 10-24 个汉字以内，零废话、可直接脱口问出；
+- alternativeQuestions：3 条，每条严格 10-22 个汉字以内。`;
 
         const response = await agent.generate(prompt, {
           structuredOutput: {

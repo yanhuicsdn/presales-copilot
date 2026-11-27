@@ -178,7 +178,7 @@ export function TopToolbar({
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 transition"
           >
             <BookOpen className="h-3.5 w-3.5" />
-            9 大 Skill 库
+            12 大 Skill 库
           </button>
         </div>
       </div>

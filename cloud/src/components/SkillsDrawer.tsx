@@ -21,8 +21,8 @@ export function SkillsDrawer({ open, onClose }: SkillsDrawerProps) {
       <div className="h-full w-full max-w-xl bg-slate-900 border-l border-slate-800 flex flex-col shadow-2xl">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800">
           <div>
-            <h2 className="text-sm font-semibold text-white">沟通方法论 Skill 规则库（完整版）</h2>
-            <p className="text-xs text-slate-400">7 大底层原则 · 9 大 Skill · 技术概念降维比喻库</p>
+            <h2 className="text-sm font-semibold text-white">FDE 售前沟通方法论 Skill 规则库（V3.0）</h2>
+            <p className="text-xs text-slate-400">10 大 FDE 原则 · 12 大实战 Skill · 降维比喻库</p>
           </div>
           <button
             type="button"
@@ -36,7 +36,7 @@ export function SkillsDrawer({ open, onClose }: SkillsDrawerProps) {
         <div className="flex-1 overflow-y-auto p-5 space-y-6 text-xs">
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-indigo-400 mb-2.5">
-              七大底层沟通原则
+              十大 FDE 底层沟通原则
             </h3>
             <div className="space-y-1.5">
               {SEVEN_COMMUNICATION_PRINCIPLES.map((p) => (
@@ -52,7 +52,7 @@ export function SkillsDrawer({ open, onClose }: SkillsDrawerProps) {
 
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-indigo-400 mb-2.5">
-              九个核心 Skill 规则
+              十二个核心实战 Skill 规则
             </h3>
             <div className="space-y-2">
               {NINE_SKILLS.map((sk) => (

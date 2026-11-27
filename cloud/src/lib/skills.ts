@@ -6,7 +6,8 @@ import type {
   StageDefinition,
 } from './types';
 
-export const SEVEN_COMMUNICATION_PRINCIPLES: ReadonlyArray<{
+// 十大 FDE 售前沟通底层原则（V3.0：基于真实政务/审计/财政/经发办客户现场沟通实录深度提炼）
+export const TEN_FDE_PRINCIPLES: ReadonlyArray<{
   index: number;
   code: string;
   title: string;
@@ -14,47 +15,68 @@ export const SEVEN_COMMUNICATION_PRINCIPLES: ReadonlyArray<{
 }> = [
   {
     index: 1,
-    code: 'NO_SOLUTION_FIRST',
-    title: '拒绝方案先行',
-    description: '客户谈论技术选型、模型参数或工具架构时，强制拉回业务痛点本身。',
+    code: 'SEE_THE_REAL_WORKFLOW_FIRST',
+    title: '先看现场不聊文档',
+    description: '客户反馈专业文档看不懂时，立刻跳过概念文档，直接看真实业务界面、截图或原始材料。',
   },
   {
     index: 2,
-    code: 'SCENE_RESTORATION_FIRST',
-    title: '场景还原优先',
-    description: '面对空泛评价（如“不好用/很乱/效率低”），必须追问具体操作画面（上传什么→点什么→期望什么→实际什么）。',
+    code: 'NO_SOLUTION_FIRST',
+    title: '拒绝方案先行',
+    description: '客户谈论 App/小程序/API/大模型选型/显卡数量时，礼貌坚定地拉回真实业务痛点本身。',
   },
   {
     index: 3,
-    code: 'DISTINGUISH_ROOT_CAUSE',
-    title: '区分问题归属',
-    description: '明确区分人的操作/习惯问题、系统技术能力问题、还是流程制度问题。',
+    code: 'SCENE_RESTORATION_AND_IO',
+    title: '场景还原与输入输出对齐',
+    description: '空泛评价必须追问到底：文件格式、单/多文件、现操作步骤、期望结构化结果、实际错在哪一步。',
   },
   {
     index: 4,
-    code: 'CONFIRM_BOUNDARIES_UPFRONT',
-    title: '边界前置确认',
-    description: '痛点清晰后，进入方案前必须确认五项边界：数据位置、内外网、数据量、终端形态、保密要求。',
+    code: 'FOUR_DIM_ROOT_CAUSE_TRIAGE',
+    title: '四维精准归因不拿AI杀鸡',
+    description: '区分人的习惯、流程制度、常规程序/数据结构（如快照Diff）、AI架构错配（缺Agent引擎/多模态干OCR/小分类用大模型）。',
   },
   {
     index: 5,
-    code: 'PARAPHRASE_LOOP_VERIFY',
-    title: '复述闭环验证',
-    description: '信息模糊、隐含前提或前后矛盾时，主动复述并请客户确认或纠正。',
+    code: 'BUSINESS_FIRST_PLATFORM_SECOND',
+    title: '业务先行平台反哺（FDE思维）',
+    description: '先用最合适的轻量工程方案打通客户眼前业务痛点，再反哺基础平台补齐OCR/存储/语音/Agent等公共能力。',
   },
   {
     index: 6,
-    code: 'REDIRECT_VAGUE_DEMAND',
-    title: '模糊需求不硬接',
-    description: '面对宏大抽象需求（如“做个企业大脑/全面智能化”），不硬接，要求落地到一个具体真实场景。',
+    code: 'SEVEN_BOUNDARIES_UPFRONT',
+    title: '七项硬边界前置排查',
+    description: '进入方案前摸清：存储与容器上限（过程图是否留存）、内外网与手机跨端、数据量与变动频次、终端运行时限制（H5息屏/函数超时）、保密与共享权限、历史样例沉淀、既有系统接口。',
   },
   {
     index: 7,
-    code: 'ORDERED_STAGE_PROGRESSION',
-    title: '阶段有序推进',
-    description: '严格按照 S0→S1→S2→S3→S4→S5 顺序推进，禁止跳步，痛点与边界未闭合前不讨论技术方案。',
+    code: 'PARAPHRASE_AND_STRIP_SOLVED',
+    title: '复述闭环与剥离已解决项',
+    description: '遇矛盾或绕圈立即复述对齐，主动帮客户剥离已经解决的环节，锁定剩余真卡点。',
+  },
+  {
+    index: 8,
+    code: 'HONEST_BOUNDARY_AND_DEFER',
+    title: '坦诚划界与验证后置',
+    description: '做过的给确定结论；触及深水区（如万级台账本体口径清洗）坦诚说明需先验证并排后；不确定性宏大需求（如宽泛产业图谱）礼貌后置并切回单一场景。',
+  },
+  {
+    index: 9,
+    code: 'TECH_ANALOGY_AND_EMPOWER',
+    title: '技术降维翻译与赋能提问',
+    description: '用汽油(大模型)/发动机(Agent)/改装件(Skill)/注意力分散等比喻消除技术隔阂，并告诉客户如何描述需求（调Skill而非训模型）。',
+  },
+  {
+    index: 10,
+    code: 'INCREMENTAL_PROTOTYPE_ORDERED',
+    title: '不推倒重来与阶段有序推进',
+    description: '肯定客户原有业务逻辑，强调保留存量+嵌入轻量Agent+脱敏样例小步试跑，严格按 S0→S5 顺序推进不跳步。',
   },
 ];
+
+// Backward-compatible export alias
+export const SEVEN_COMMUNICATION_PRINCIPLES = TEN_FDE_PRINCIPLES;
 
 export const STAGE_ORDER: readonly StageCode[] = ['S0', 'S1', 'S2', 'S3', 'S4', 'S5'] as const;
 
@@ -63,49 +85,68 @@ export const STAGE_DEFINITIONS: Record<StageCode, StageDefinition> = {
     code: 'S0',
     index: 0,
     name: '破冰开场',
-    goal: '建立沟通氛围，请客户简述业务现状与当前核心关注点',
+    goal: '跳过专业文档，直接看客户真实业务界面/操作流程与核心关注点',
     allowedSkills: ['scene_restoration_probe'],
-    exitCriteria: '客户已简述当前业务背景或初步场景',
+    exitCriteria: '客户已简述当前业务背景或展示具体工作场景',
   },
   S1: {
     code: 'S1',
     index: 1,
     name: '痛点挖掘',
-    goal: '收集真实业务卡点，还原操作现场，拦截过早谈方案',
-    allowedSkills: ['interrupt_solution_first', 'scene_restoration_probe', 'vague_demand_redirect'],
-    exitCriteria: '已收集至少1个具备具体业务场景的清晰痛点（痛点清晰度 >= 65）',
+    goal: '死咬业务痛点、还原文件输入与期望输出、拦截方案先行与宏大空泛需求',
+    allowedSkills: [
+      'interrupt_solution_first',
+      'scene_restoration_probe',
+      'vague_demand_redirect',
+      'honest_boundary_defer',
+    ],
+    exitCriteria: '已收集至少1个具备具体输入/步骤/差异的真实业务痛点（痛点清晰度 >= 65）',
   },
   S2: {
     code: 'S2',
     index: 2,
     name: '根因分析',
-    goal: '区分问题归属（人的问题 / 系统技术问题 / 流程制度问题），消除前后矛盾',
-    allowedSkills: ['root_cause_distinction', 'paraphrase_loop_confirm'],
-    exitCriteria: '已明确主要痛点的问题归属且无未消解矛盾',
+    goal: '四维精准归因（人/流程/常规程序/AI架构错配），剥离已解决项与消除矛盾',
+    allowedSkills: [
+      'root_cause_distinction',
+      'ai_vs_engineering_triage',
+      'paraphrase_loop_confirm',
+    ],
+    exitCriteria: '已明确核心痛点归属且未拿AI硬扛常规工程问题',
   },
   S3: {
     code: 'S3',
     index: 3,
     name: '边界确认',
-    goal: '前置确认五项关键约束：数据在哪、内外网、数据量、终端、保密等级',
-    allowedSkills: ['boundary_constraints_confirm'],
-    exitCriteria: '五项边界条件全部确认',
+    goal: '前置摸清七项现实约束（存储容量/内外网/数据量/终端运行时/保密权限/历史样例/既有接口）',
+    allowedSkills: ['boundary_constraints_confirm', 'prototype_and_sample_anchor'],
+    exitCriteria: '核心五项边界全部确认，且了解样例与平台限制',
   },
   S4: {
     code: 'S4',
     index: 4,
     name: '痛点收敛',
-    goal: '汇总已识别的痛点与约束，请客户排序优先级并复述确认',
-    allowedSkills: ['pain_point_convergence', 'paraphrase_loop_confirm'],
-    exitCriteria: '客户已确认痛点清单与优先级排序',
+    goal: '汇总痛点排一期优先级，将高复杂度未验证项坦诚后置二期并复述闭环',
+    allowedSkills: [
+      'pain_point_convergence',
+      'honest_boundary_defer',
+      'paraphrase_loop_confirm',
+    ],
+    exitCriteria: '客户已确认一期优先痛点清单与二期后置项',
   },
   S5: {
     code: 'S5',
     index: 5,
     name: '方案探讨',
-    goal: '围绕高优痛点与已确认边界探讨解决思路，用通俗比喻降维解释技术概念',
-    allowedSkills: ['tech_concept_translation', 'stage_progression_control'],
-    exitCriteria: '方案方向与下一步行动计划达成共识',
+    goal: '保留原有业务逻辑，用生活比喻讲清轻量方案（Agent/Skill/OCR/小模型/向量化），锚定脱敏样例试跑与下一步行动',
+    allowedSkills: [
+      'tech_concept_translation',
+      'ai_vs_engineering_triage',
+      'prototype_and_sample_anchor',
+      'honest_boundary_defer',
+      'stage_progression_control',
+    ],
+    exitCriteria: '一期落地路径、脱敏验证样例与下次对接安排达成共识',
   },
 };
 
@@ -116,156 +157,216 @@ export const TECH_ANALOGY_LIBRARY: ReadonlyArray<{
 }> = [
   {
     concept: '大模型 / 基座模型',
+    analogy: '汽油（92/95/98号油）',
+    script: '大模型像汽油，直接点只能简单发热（对话式）；换更强模型相当于换更高标号油。',
+  },
+  {
+    concept: 'Agent 智能体引擎',
     analogy: '发动机',
-    script: '大模型就像汽车的发动机，提供通用动力；单有发动机跑不起来，还得配底盘和方向盘。',
+    script: 'Agent 引擎就是发动机，把油装进去反复循环做功，多轮处理复杂业务。',
   },
   {
-    concept: '企业数据 / 知识库',
-    analogy: '汽油',
-    script: '你们内部的业务文档和数据就像汽油，油品越干净、标号越准，发动机输出的动力才越稳。',
+    concept: 'Skill / MCP / 业务规则',
+    analogy: '轮子、车把与改装件',
+    script: 'Skill 就是给发动机装上轮子和车把，不是去训练大模型，而是调你自己的 Skill。',
   },
   {
-    concept: '微调 / 插件 / 工作流 / Agent',
-    analogy: '改装件与导航系统',
-    script: 'Agent 编排和插件就像给车装上的专用改装件和导航，让它严格按你们的业务路线自动跑。',
+    concept: '多轮校验与 Attention 原理',
+    analogy: '防注意力分散',
+    script: '一次塞几十条审核规则模型会分心漏审；用 Agent 拆成一轮专查一条，准确率立马上来。',
   },
   {
-    concept: '私有化部署 / 内网隔离',
+    concept: '专用 OCR / 小决策模型',
+    analogy: '不拿牛刀杀鸡',
+    script: '文字识别用纯CPU 200ms/页的专用OCR，分类用轻量小模型，比多模态大模型快十倍还更稳。',
+  },
+  {
+    concept: 'Embedding 向量检索 / LLM-Wiki',
+    analogy: '按语义找相似案例',
+    script: '淘汰老式关键词切片 RAG，把历史案例向量化或编译成结构化 Wiki，即使一案一例也能精准找参考。',
+  },
+  {
+    concept: '私有化内网部署',
     analogy: '自家封闭试车场',
-    script: '内网部署就像把整套车和油都锁在你们自己的封闭园区里跑，数据一滴都不会流到外面。',
+    script: '整套车和油都在贵司内网园区里跑，原始数据与过程文件绝不出域。',
   },
 ];
 
-export const NINE_SKILLS: readonly SkillDefinition[] = [
+export const TWELVE_SKILLS: readonly SkillDefinition[] = [
   {
     id: 'interrupt_solution_first',
     name: '打断方案先行',
-    triggerCondition: '客户提前谈论技术工具、大模型选型、RAG/微调/私有化架构等方案细节',
-    promptTemplate: '先不说解决方案和技术选型，我们先拉回到业务本身：您现在日常工作里最卡壳的问题到底是什么？',
-    completionCriteria: '客户停止讨论技术方案，开始描述具体业务困难',
+    triggerCondition: '客户提前谈论 App/小程序/API/大模型选型/RAG/显卡数量等具体解决方案',
+    promptTemplate: '先不说方案，现在最卡壳的业务问题是什么？',
+    completionCriteria: '客户停止讨论工具形态，开始描述具体业务困难',
     allowedStages: ['S1'],
     priority: 100,
     examples: [
-      '先不急着定用哪个大模型或做不做微调，能先说说现在业务团队每天最头疼的具体环节是什么吗？',
-      '技术路线我们后面一定一起看，现在先请您带我看下：如果不谈工具，业务上最耽误事的一步在哪？',
-    ],
-    enabled: true,
-  },
-  {
-    id: 'scene_restoration_probe',
-    name: '场景还原追问',
-    triggerCondition: '客户回答空泛抽象（如“不好用”、“很乱”、“效率低”、“体验差”）',
-    promptTemplate: '能否带我还原一次具体操作画面：业务员当时上传/拿到了什么材料→点了什么步骤→原本期望什么结果→实际出来的是什么？',
-    completionCriteria: '客户给出具体文件/输入、操作步骤、期望结果、实际结果四项要素',
-    allowedStages: ['S0', 'S1'],
-    priority: 90,
-    examples: [
-      '您刚才提到现在流程“很乱、不好用”，能拿昨天发生的一单具体举例吗？员工先上传什么、点哪一步、原本期望出什么、实际卡在哪了？',
-      '为了不理解偏差，能帮我回放一个最典型的操作片段吗？输入文件是什么，最后哪里让您觉得不满意？',
-    ],
-    enabled: true,
-  },
-  {
-    id: 'root_cause_distinction',
-    name: '根因深挖区分',
-    triggerCondition: '客户将问题笼统归咎于系统或团队，但未说清根本原因',
-    promptTemplate: '听下来这个问题很典型，想跟您一起拆一下：这主要是人员操作习惯/培训问题、现有系统功能确实做不到，还是跨部门流程制度卡住了？',
-    completionCriteria: '明确问题归属于人、系统技术或流程制度中的具体维度',
-    allowedStages: ['S2'],
-    priority: 95,
-    examples: [
-      '您说的审批慢和数据对不上，本质上是现有系统能力做不到，还是各部门填报口径/制度没统一，或者是员工操作习惯问题？',
-      '如果把现有系统换掉，这个问题会自动消失吗，还是背后有流程审批权限的限制？',
-    ],
-    enabled: true,
-  },
-  {
-    id: 'boundary_constraints_confirm',
-    name: '边界约束确认',
-    triggerCondition: '业务痛点与根因已清晰，但缺少五项关键落地约束中的任意一项',
-    promptTemplate: '痛点很清楚了，在想方案前先核对五个硬边界：数据目前存在哪？运行在内网还是外网？大概多大数据量？一线在什么终端使用？保密合规有什么硬要求？',
-    completionCriteria: '数据位置、网络环境、数据量级、终端类型、保密要求五项边界全部确认',
-    allowedStages: ['S3'],
-    priority: 95,
-    examples: [
-      '为了后面给的方案能真正落地，先向您确认下硬约束：这些业务数据目前存在哪，是纯内网还是能连外网？',
-      '除了网络和数据位置，还想确认下日均/存量数据规模大概多大？一线员工主要用电脑还是手机，涉密等级有什么要求？',
-    ],
-    enabled: true,
-  },
-  {
-    id: 'paraphrase_loop_confirm',
-    name: '复述闭环确认',
-    triggerCondition: '客户前后表述矛盾、信息含糊或阶段收口前需要对齐认知',
-    promptTemplate: '我快速复述一下刚听到的要点，您看我理解得对不对：核心情况是【XX】，但刚才您提到【YY】，这两处我们以哪个为准？',
-    completionCriteria: '客户明确确认理解无误，或指出偏差并完成纠正',
-    allowedStages: ['S2', 'S4'],
-    priority: 88,
-    examples: [
-      '我复述确认一下，看有没有理解偏：您刚才说数据不能出内网，同时又希望外勤手机随时查，这两点我们实际落地时优先按哪个口径来？',
-      '我把刚才对齐的几个核心点复述一遍，您帮我把把关，看看有没有漏掉或理解错的地方？',
+      '先不说方案，现在最卡壳的业务问题是什么？',
+      '抛开工具不谈，团队每天最耗人力的事是什么？',
     ],
     enabled: true,
   },
   {
     id: 'vague_demand_redirect',
     name: '模糊需求拒接引导',
-    triggerCondition: '客户提出宏大抽象目标（如“做一个全能AI大脑”、“全面数字化赋能”、“所有部门都接上”）',
-    promptTemplate: '这个愿景方向太大了，咱们一口吃不成胖子；您先给我切一个最痛、最真实、明天就想解决的单一业务场景行吗？',
+    triggerCondition: '客户提出宏大抽象或跨行业不确定需求（企业大脑/产业图谱/全面智能化）',
+    promptTemplate: '方向太大，先切一个最具体高频的单点场景？',
     completionCriteria: '客户收敛范围，给出一个具体的单一真实业务场景',
     allowedStages: ['S1'],
     priority: 98,
     examples: [
-      '“全公司智能化升级”范围太大，咱们一期如果只打透一个部门、一个高频动作，您最想先解决哪一个具体场景？',
-      '大蓝图我们记下来了，但为了项目能落地见效，能先挑一个目前最耗人力、最具体的单一环节切入吗？',
+      '方向太大，先切一个最具体高频的单点场景？',
+      '一期只打透一个最耗人工的小环节，您先选哪个？',
+    ],
+    enabled: true,
+  },
+  {
+    id: 'scene_restoration_probe',
+    name: '场景还原追问',
+    triggerCondition: '客户看不懂专业文档、描述空泛（不好用/很乱/不准）或未说清输入文件与期望输出',
+    promptTemplate: '能看下实际界面或举例：传什么文件、卡在哪？',
+    completionCriteria: '客户明确文件格式、单/多文件、操作步骤、期望与实际差异',
+    allowedStages: ['S0', 'S1'],
+    priority: 92,
+    examples: [
+      '先不看文档，能看下您实际操作界面或样例吗？',
+      '能举例说说：传什么格式文件、期望出什么、实际错在哪？',
+    ],
+    enabled: true,
+  },
+  {
+    id: 'root_cause_distinction',
+    name: '四维根因深挖',
+    triggerCondition: '客户笼统归咎于系统或 AI 不准，但混杂了人、流程、程序与 AI 架构问题',
+    promptTemplate: '这是人没及时录、流程卡住，还是系统或AI没拆步骤？',
+    completionCriteria: '明确问题归属（人/流程/常规程序/AI架构）',
+    allowedStages: ['S2'],
+    priority: 95,
+    examples: [
+      '这是人没及时录、流程卡住，还是系统本身做不到？',
+      '如果只换工具不改流程和填报习惯，能解决几成？',
+    ],
+    enabled: true,
+  },
+  {
+    id: 'ai_vs_engineering_triage',
+    name: 'AI与常规工程分诊',
+    triggerCondition: '客户用大模型硬扛纯逻辑比对（如快照Diff）、用多模态干OCR导致超时、或用大模型做简单二分类',
+    promptTemplate: '这更像程序比对或专用OCR问题，真要上大模型吗？',
+    completionCriteria: '剥离非AI工程问题，明确哪些用规则/OCR/小模型、哪些用Agent',
+    allowedStages: ['S2', 'S5'],
+    priority: 96,
+    examples: [
+      '没变化不推送像程序Diff逻辑，真要靠AI判吗？',
+      '解析慢是不是用了多模态干OCR？换专用OCR快十倍。',
+    ],
+    enabled: true,
+  },
+  {
+    id: 'paraphrase_loop_confirm',
+    name: '复述闭环确认',
+    triggerCondition: '客户前后矛盾（如纯内网+外勤手机查）、业务逻辑绕圈，或需剥离已解决环节',
+    promptTemplate: '复述确认下：前面已解决，真卡点在这对吗？',
+    completionCriteria: '客户确认或纠正理解，聚焦剩余真问题',
+    allowedStages: ['S2', 'S4'],
+    priority: 90,
+    examples: [
+      '复述确认下：条码录入已解决，卡点只在二次核对？',
+      '纯内网和手机外勤查冲突，落地先保哪一边？',
+    ],
+    enabled: true,
+  },
+  {
+    id: 'boundary_constraints_confirm',
+    name: '七项边界约束确认',
+    triggerCondition: '痛点根因清晰，但缺少存储容量/过程图留存/内外网/数据量/终端运行时/保密共享/接口等硬边界',
+    promptTemplate: '核对下硬边界：数据存哪、纯内网吗、过程图留不留？',
+    completionCriteria: '核心边界条件明确，排查出容器上限、云端超时、H5息屏断录等隐患',
+    allowedStages: ['S3'],
+    priority: 95,
+    examples: [
+      '核对下边界：数据存政务云还是容器，纯内网吗？',
+      '照片识别完扔不扔？存量和月变动大概多少条？',
     ],
     enabled: true,
   },
   {
     id: 'pain_point_convergence',
     name: '痛点验证收口',
-    triggerCondition: '已收集多个痛点且边界已基本清楚，进入收敛排序阶段',
-    promptTemplate: '目前我们梳理出几个核心痛点，如果一期资源有限只能先解决 1-2 个，您会怎么排优先级？',
-    completionCriteria: '客户确认痛点清单并明确 P0/P1 优先级顺序',
+    triggerCondition: '多个痛点与边界已收集完成，需锁定一期最值得打透的优先级',
+    promptTemplate: '这几个痛点里，一期先打透哪一个见效最快？',
+    completionCriteria: '客户明确一期 P0 痛点与优先级排序',
     allowedStages: ['S4'],
-    priority: 95,
+    priority: 94,
     examples: [
-      '刚才我们一共挖出了这些核心痛点，加上刚确认的内外网与保密边界，您看哪个痛点最紧急、最值得放进一期最优先解决？',
-      '如果这三个痛点必须排个第一、第二、第三，从业务价值和领导关注度来看，您怎么排序？',
+      '这几个痛点里，一期先打透哪一个见效最快？',
+      '结合边界限制，哪一块先跑通大家最有体感？',
+    ],
+    enabled: true,
+  },
+  {
+    id: 'honest_boundary_defer',
+    name: '坦诚划界与验证后置',
+    triggerCondition: '遇到未验证过的深水区难题（如万级混乱字段Ontology本体清洗）或跨行业不确定需求',
+    promptTemplate: '这块复杂度高需先验证，先排到二期行吗？',
+    completionCriteria: '坦诚建立信任，将高不确定性需求合理后置，保住一期确定性交付',
+    allowedStages: ['S1', 'S4', 'S5'],
+    priority: 93,
+    examples: [
+      '口径清洗涉及本体论，我们没做过得先验证，放二期行吗？',
+      '这个方向偏跨行业不确定需求，先往后放行吗？',
     ],
     enabled: true,
   },
   {
     id: 'tech_concept_translation',
     name: '技术概念降维翻译',
-    triggerCondition: 'S5 方案探讨阶段涉及专业技术术语，需要让非技术业务方听懂',
-    promptTemplate: '用通俗比喻解释：大模型是“发动机”，贵司业务数据是“汽油”，智能体工作流是“专用改装件和导航”，三者配合才能把业务跑顺。',
-    completionCriteria: '客户表示听懂技术机制并能围绕业务价值继续讨论',
+    triggerCondition: 'S5 阶段需要向非技术业务方解释 Agent/Skill/多轮校验/向量化/OCR 等概念',
+    promptTemplate: '打个比方：模型是汽油，Agent是发动机，Skill是改装件。',
+    completionCriteria: '客户听懂并理解“调 Skill 而非训练大模型”',
     allowedStages: ['S5'],
-    priority: 85,
+    priority: 86,
     examples: [
-      '其实不用被那些技术词绕晕：大模型就像发动机，你们的制度文档是汽油，我们做的 Agent 就像装上定制改装件和导航，确保车按你们的规矩开。这样说您觉得清楚吗？',
-      '换个好理解的说法：内网部署就是把发动机和汽油都放进你们自己的封闭园区里跑，既安全又能提效。',
+      '打个比方：模型是汽油，Agent是发动机，Skill是改装件。',
+      '不是去训大模型，而是把您的审核规则调成Skill。',
+    ],
+    enabled: true,
+  },
+  {
+    id: 'prototype_and_sample_anchor',
+    name: '脱敏样例与存量改造锚定',
+    triggerCondition: '客户担心推倒重来、没有结构化训练数据、或询问一期如何起步',
+    promptTemplate: '不用推倒重来，能先给几份脱敏样例试跑吗？',
+    completionCriteria: '打消推倒重来顾虑，锁定脱敏验证样本与轻量化切入方式',
+    allowedStages: ['S3', 'S5'],
+    priority: 88,
+    examples: [
+      '不用推倒重来，能先给10份脱敏样例试跑吗？',
+      '一案一例也没关系，能先导出历史资料建语义库吗？',
     ],
     enabled: true,
   },
   {
     id: 'stage_progression_control',
     name: '阶段推进控制',
-    triggerCondition: '当前阶段目标已经达成，需获得客户认可平滑过渡到下一阶段或收尾定行动项',
-    promptTemplate: '前面几块的痛点和约束已经非常清晰了，如果您这边没有补充，我们接下来就正式聊聊对应的解决思路和落地方案，可以吗？',
-    completionCriteria: '客户明确同意进入下一阶段或确认下一步行动计划',
+    triggerCondition: '痛点与边界已对齐，推动进入方案讨论或锁定下一步验证行动',
+    promptTemplate: '痛点和边界都齐了，接下来聊一期落地思路行吗？',
+    completionCriteria: '客户同意推进或确认下一步验证时间与对接人',
     allowedStages: ['S5'],
-    priority: 80,
+    priority: 82,
     examples: [
-      '痛点、根因和五项边界咱们都已经对齐了，接下来我基于这几个高优痛点讲一下整体解决思路和一期切入点，您看可以吗？',
-      '方案大方向达成共识了，接下来我们把下一步 POC 验证范围和时间节点定一下，您看下周方便安排一次技术对接吗？',
+      '痛点和边界都齐了，接下来聊一期落地思路行吗？',
+      '下一步先用脱敏样例跑通一个单点，下周方便对接吗？',
     ],
     enabled: true,
   },
 ];
 
-export const SKILL_MAP: Record<SkillId, SkillDefinition> = NINE_SKILLS.reduce(
+// Backward-compatible export alias
+export const NINE_SKILLS = TWELVE_SKILLS;
+
+export const SKILL_MAP: Record<SkillId, SkillDefinition> = TWELVE_SKILLS.reduce(
   (acc, skill) => {
     acc[skill.id] = skill;
     return acc;
@@ -283,7 +384,6 @@ export function isValidStageTransition(from: StageCode, to: StageCode): boolean 
   const fromIdx = STAGE_ORDER.indexOf(from);
   const toIdx = STAGE_ORDER.indexOf(to);
   if (fromIdx === -1 || toIdx === -1) return false;
-  // Stay in same stage OR advance by strictly 1 step (no skipping!)
   return toIdx === fromIdx || toIdx === fromIdx + 1;
 }
 
@@ -292,11 +392,11 @@ export function getMissingBoundaries(boundaries: BoundaryConstraints): Array<{
   label: string;
 }> {
   const items: Array<{ key: keyof BoundaryConstraints; label: string }> = [
-    { key: 'dataLocation', label: '数据存放位置' },
-    { key: 'networkType', label: '内网/外网环境' },
+    { key: 'dataLocation', label: '数据与存储位置' },
+    { key: 'networkType', label: '内网/外网与跨端' },
     { key: 'dataVolume', label: '数据量级' },
-    { key: 'terminalType', label: '使用终端' },
-    { key: 'confidentiality', label: '保密合规要求' },
+    { key: 'terminalType', label: '使用终端与运行限制' },
+    { key: 'confidentiality', label: '保密与共享要求' },
   ];
   return items.filter((item) => !boundaries[item.key] || boundaries[item.key]?.trim() === '');
 }

@@ -180,7 +180,8 @@ export class PresalesWsGateway {
               nextExpectedSeq: ingest.nextExpectedSeq,
             });
 
-            if (ingest.acceptedSegments.length > 0) {
+            const shouldAnalyze = msg.autoAnalyze !== false;
+            if (shouldAnalyze && ingest.acceptedSegments.length > 0) {
               const latestSeq = ingest.acceptedSegments[ingest.acceptedSegments.length - 1].seq;
               const result = await runPresalesAnalysis({
                 groupId: msg.groupId,
@@ -204,6 +205,29 @@ export class PresalesWsGateway {
           });
           break;
         }
+        case 'request_hint': {
+          meta.groupId = msg.groupId;
+          await this.enqueueGroupWork(msg.groupId, async () => {
+            const result = await runPresalesAnalysis({
+              groupId: msg.groupId,
+              sessionId: msg.sessionId ?? null,
+            });
+            this.broadcastToGroup(msg.groupId, {
+              type: 'question_card',
+              card: result.card,
+            });
+            if (result.stageChanged) {
+              this.broadcastToGroup(msg.groupId, {
+                type: 'stage_updated',
+                groupId: msg.groupId,
+                previousStage: result.previousStage,
+                currentStage: result.currentStage,
+                checkpoint: result.checkpoint,
+              });
+            }
+          });
+          break;
+        }
         case 'segment_batch': {
           meta.groupId = msg.groupId;
           await this.enqueueGroupWork(msg.groupId, async () => {
@@ -218,7 +242,7 @@ export class PresalesWsGateway {
               nextExpectedSeq: ingest.nextExpectedSeq,
             });
 
-            if (ingest.acceptedSegments.length > 0) {
+            if (msg.autoAnalyze !== false && ingest.acceptedSegments.length > 0) {
               const latest = ingest.acceptedSegments[ingest.acceptedSegments.length - 1];
               const result = await runPresalesAnalysis({
                 groupId: msg.groupId,

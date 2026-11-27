@@ -3,12 +3,15 @@ export type StageCode = 'S0' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5';
 export type SkillId =
   | 'interrupt_solution_first'     // 打断方案先行
   | 'scene_restoration_probe'      // 场景还原追问
-  | 'root_cause_distinction'       // 根因深挖区分
+  | 'root_cause_distinction'       // 四维根因深挖
+  | 'ai_vs_engineering_triage'     // AI 与常规工程分诊
   | 'boundary_constraints_confirm' // 边界约束确认
   | 'paraphrase_loop_confirm'      // 复述闭环确认
   | 'vague_demand_redirect'        // 模糊需求拒接引导
   | 'pain_point_convergence'       // 痛点验证收口
+  | 'honest_boundary_defer'        // 坦诚划界与验证后置
   | 'tech_concept_translation'     // 技术概念降维翻译
+  | 'prototype_and_sample_anchor'  // 脱敏样例与存量改造锚定
   | 'stage_progression_control';   // 阶段推进控制
 
 export type RiskLevel = 'low' | 'medium' | 'high';
@@ -21,12 +24,22 @@ export interface RiskTag {
 }
 
 export interface BoundaryConstraints {
-  dataLocation: string | null;    // 数据在哪
-  networkType: string | null;     // 内网还是外网
-  dataVolume: string | null;      // 数据量
-  terminalType: string | null;    // 终端类型
-  confidentiality: string | null; // 保密级别
+  dataLocation: string | null;          // 数据与过程文件存哪/容器上限
+  networkType: string | null;           // 内网/外网/手机跨端可达性
+  dataVolume: string | null;            // 数据量级与变动频次
+  terminalType: string | null;          // 使用终端与运行时限制(H5/超时)
+  confidentiality: string | null;       // 保密级别与共享权限
+  historicalDataStatus?: string | null; // 历史样例/脱敏数据沉淀情况
+  systemConstraints?: string | null;    // 既有系统/API/密钥/时长限制
 }
+
+export type RootCauseCategory =
+  | 'people'
+  | 'system'
+  | 'process'
+  | 'engineering'
+  | 'ai_architecture'
+  | 'unknown';
 
 export interface SceneSlot {
   uploadInput?: string;
@@ -39,7 +52,7 @@ export interface PainPointItem {
   id: string;
   title: string;
   description: string;
-  rootCauseCategory: 'people' | 'system' | 'process' | 'unknown';
+  rootCauseCategory: RootCauseCategory;
   priority: number | null; // 1 = highest
   scene?: SceneSlot;
   confirmed: boolean;
@@ -122,15 +135,18 @@ export interface SixDimensionAnalysis {
   contradictionDetail?: string;
   emotion: 'positive' | 'neutral' | 'frustrated' | 'skeptical' | 'anxious';
   painPointClarity: number;       // 0..100 痛点清晰度
-  rootCauseIdentified: 'people' | 'system' | 'process' | 'unknown';
+  rootCauseIdentified: RootCauseCategory;
   vagueGrandDemand: boolean;      // 宏大抽象需求
+  needsEngineeringTriage?: boolean; // 是否为常规程序/专用小模型/OCR误用大模型场景
+  needsHonestDefer?: boolean;       // 是否触及未验证深水区(如本体清洗/跨行业不确定需求)
+  needsSampleAnchor?: boolean;      // 是否担忧推倒重来或缺训练数据
   needsTechTranslation: boolean;  // 是否需要技术概念降维翻译
   stageGoalMet: boolean;          // 当前阶段目标是否达成
   customerAgreedToAdvance: boolean;
   extractedPainPoints: Array<{
     title: string;
     description: string;
-    rootCauseCategory: 'people' | 'system' | 'process' | 'unknown';
+    rootCauseCategory: RootCauseCategory;
   }>;
   extractedBoundaries: Partial<BoundaryConstraints>;
   summaryDelta: string;
@@ -210,8 +226,9 @@ export interface SequenceIngestResult {
 // WebSocket Wire Messages
 export type ClientWsMessage =
   | { type: 'subscribe'; groupId: string; sessionId?: string }
-  | { type: 'segment'; groupId: string; sessionId: string; segmentId?: string; seq: number; text: string; startedAt?: number; endedAt?: number; isFinal?: boolean }
-  | { type: 'segment_batch'; groupId: string; segments: IncomingSegmentPayload[] }
+  | { type: 'segment'; groupId: string; sessionId: string; segmentId?: string; seq: number; text: string; startedAt?: number; endedAt?: number; isFinal?: boolean; autoAnalyze?: boolean }
+  | { type: 'segment_batch'; groupId: string; segments: IncomingSegmentPayload[]; autoAnalyze?: boolean }
+  | { type: 'request_hint'; groupId: string; sessionId?: string }
   | { type: 'segment_edit'; groupId: string; segmentId: string; text: string }
   | { type: 'session_control'; groupId: string; sessionId?: string; action: 'start' | 'pause' | 'resume' | 'end' }
   | { type: 'ping'; ts: number };

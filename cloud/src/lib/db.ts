@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createClient, type Client } from '@libsql/client';
-import { NINE_SKILLS } from './skills';
+import { TWELVE_SKILLS } from './skills';
 import { computeTextEmbedding, type EmbeddedSegment } from './vector-recall';
 import type {
   CustomerGroup,
@@ -43,6 +43,8 @@ export function createInitialCheckpoint(
       dataVolume: null,
       terminalType: null,
       confidentiality: null,
+      historicalDataStatus: null,
+      systemConstraints: null,
     },
     confirmedItems: [],
     unconfirmedItems: [],
@@ -167,17 +169,13 @@ export class PresalesDatabase {
       CREATE INDEX IF NOT EXISTS idx_summaries_group_time ON meeting_summaries(group_id, created_at);
     `);
 
-    // Seed default 9 skills if empty
-    const existingSkills = await this.client.execute('SELECT COUNT(*) as cnt FROM skill_configs');
-    const count = Number(existingSkills.rows[0]?.cnt ?? 0);
-    if (count === 0) {
-      const now = Date.now();
-      for (const skill of NINE_SKILLS) {
-        await this.client.execute({
-          sql: 'INSERT OR IGNORE INTO skill_configs (id, config_json, updated_at) VALUES (?, ?, ?)',
-          args: [skill.id, JSON.stringify(skill), now],
-        });
-      }
+    // Sync all 12 V3.0 FDE skills (idempotent upgrade from 9-skill DBs)
+    const now = Date.now();
+    for (const skill of TWELVE_SKILLS) {
+      await this.client.execute({
+        sql: 'INSERT OR REPLACE INTO skill_configs (id, config_json, updated_at) VALUES (?, ?, ?)',
+        args: [skill.id, JSON.stringify(skill), now],
+      });
     }
 
     this.initialized = true;

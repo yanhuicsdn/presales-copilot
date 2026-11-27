@@ -183,8 +183,8 @@ describe('End-to-End Integration: Next.js API + WebSocket Gateway + Mastra Engin
     expect(health.agentEngine).toBe('mastra');
 
     const skills = await fetch(`${baseUrl}/api/skills`).then((r) => r.json());
-    expect(skills.principles).toHaveLength(7);
-    expect(skills.skills).toHaveLength(9);
+    expect(skills.principles).toHaveLength(10);
+    expect(skills.skills).toHaveLength(12);
     expect(skills.stages).toHaveLength(6);
 
     // 2. Create customer group

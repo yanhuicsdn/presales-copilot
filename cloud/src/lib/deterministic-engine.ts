@@ -64,6 +64,26 @@ const PROCESS_CAUSE_KEYWORDS = [
   '流程', '审批', '跨部门', '制度', '口径不统一', '签字', '权限', '扯皮', '规范没定',
 ];
 
+const ENGINEERING_CAUSE_KEYWORDS = [
+  '重复推送', '全量推送', '状态对比', '快照对比', 'diff', '60秒超时', '接口超时',
+  '容器100兆', '存储上限', '没存图片', '程序逻辑', '数据库字段', '没做去重', '同步漏推',
+];
+
+const AI_ARCH_CAUSE_KEYWORDS = [
+  '单次对话', '单轮prompt', '多模态识别', '多模态做ocr', '切片', '注意力分散',
+  '漏审', '审核规则太多', '没接agent', '跑十多分钟', '解析太慢', '提示词太长',
+];
+
+const HONEST_DEFER_KEYWORDS = [
+  '本体', 'ontology', '字段混乱', '地址不统一', '历史数据清洗', '产业图谱',
+  '二栋几零几', '没做过', '不确定需求', '语义统一', '口径清洗', '跨行业图谱',
+];
+
+const SAMPLE_ANCHOR_KEYWORDS = [
+  '推倒重来', '重做一套', '一案一例', '没有训练数据', '脱敏样例', '存量改造',
+  '怎么验证', '小步试跑', '历史模板', '现成系统',
+];
+
 const AGREE_ADVANCE_KEYWORDS = [
   '可以', '行', '没问题', '同意', '聊聊方案', '听听思路', '进入下一步', '说得对', '排第一', '优先解决', '认可',
 ];
@@ -110,6 +130,18 @@ export function extractBoundariesFromText(text: string): Partial<BoundaryConstra
   if (/(涉密|机密|绝密|秘密|等保三级|等保二级|不可出域|数据不出内网|脱敏|合规|非涉密|公开数据|商密)/.test(t)) {
     const match = t.match(/(绝密|机密|涉密|商密|等保三级|等保二级|数据不出内网|不可出域|非涉密|公开数据|脱敏)/);
     result.confidentiality = match ? match[0] : '高保密/数据不出域';
+  }
+
+  // Historical data & sample status (V3.0 Boundary 6)
+  if (/(脱敏样例|样本|历史记录|数据很乱|口径不统一|没留底|没保存图片|电子台账|纸质|一案一例|历史数据)/.test(t)) {
+    const match = t.match(/(脱敏样例|历史数据|数据很乱|口径不统一|没留底|没保存图片|电子台账|纸质|一案一例)/);
+    result.historicalDataStatus = match ? match[0] : '已提及历史数据/样例现状';
+  }
+
+  // Existing system & runtime constraints (V3.0 Boundary 7)
+  if (/(60秒超时|超时限制|容器.*100|h5.*锁屏|锁屏中断|老系统接口|不能改原系统|对象存储|存量小程序|api限制)/i.test(t)) {
+    const match = t.match(/(60秒超时|超时限制|容器[^，。；]{0,8}|H5[^，。；]{0,8}|锁屏中断|老系统接口|不能改原系统|对象存储|存量小程序)/i);
+    result.systemConstraints = match ? match[0] : '存在现网系统/运行限制';
   }
 
   return result;
@@ -170,13 +202,23 @@ export function deterministicAnalyze(
   }
 
   let rootCauseIdentified: SixDimensionAnalysis['rootCauseIdentified'] = 'unknown';
-  if (SYSTEM_CAUSE_KEYWORDS.some((kw) => latestText.includes(kw))) {
+  const hitEngineering = ENGINEERING_CAUSE_KEYWORDS.some((kw) => lower.includes(kw));
+  const hitAiArch = AI_ARCH_CAUSE_KEYWORDS.some((kw) => lower.includes(kw));
+  if (hitEngineering) {
+    rootCauseIdentified = 'engineering';
+  } else if (hitAiArch) {
+    rootCauseIdentified = 'ai_architecture';
+  } else if (SYSTEM_CAUSE_KEYWORDS.some((kw) => latestText.includes(kw))) {
     rootCauseIdentified = 'system';
   } else if (PROCESS_CAUSE_KEYWORDS.some((kw) => latestText.includes(kw))) {
     rootCauseIdentified = 'process';
   } else if (PEOPLE_CAUSE_KEYWORDS.some((kw) => latestText.includes(kw))) {
     rootCauseIdentified = 'people';
   }
+
+  const needsEngineeringTriage = hitEngineering || hitAiArch;
+  const needsHonestDefer = HONEST_DEFER_KEYWORDS.some((kw) => lower.includes(kw));
+  const needsSampleAnchor = SAMPLE_ANCHOR_KEYWORDS.some((kw) => lower.includes(kw));
 
   // Pain point extraction
   const extractedPainPoints: SixDimensionAnalysis['extractedPainPoints'] = [];
@@ -204,6 +246,10 @@ export function deterministicAnalyze(
     dataVolume: extractedBoundaries.dataVolume ?? checkpoint.boundaries.dataVolume,
     terminalType: extractedBoundaries.terminalType ?? checkpoint.boundaries.terminalType,
     confidentiality: extractedBoundaries.confidentiality ?? checkpoint.boundaries.confidentiality,
+    historicalDataStatus:
+      extractedBoundaries.historicalDataStatus ?? checkpoint.boundaries.historicalDataStatus ?? null,
+    systemConstraints:
+      extractedBoundaries.systemConstraints ?? checkpoint.boundaries.systemConstraints ?? null,
   };
 
   let painPointClarity = checkpoint.painPoints.length > 0 ? 55 : 20;
@@ -261,6 +307,9 @@ export function deterministicAnalyze(
     painPointClarity,
     rootCauseIdentified,
     vagueGrandDemand,
+    needsEngineeringTriage,
+    needsHonestDefer,
+    needsSampleAnchor,
     needsTechTranslation,
     stageGoalMet,
     customerAgreedToAdvance,
@@ -309,6 +358,10 @@ export function routeStrategy(
       matched.push('vague_demand_redirect');
       reasons.push('检测到宏大抽象需求，触发「模糊需求拒接引导」聚焦单一真实场景');
     }
+    if (analysis.needsHonestDefer && allowed.includes('honest_boundary_defer')) {
+      matched.push('honest_boundary_defer');
+      reasons.push('检测到高不确定性/跨行业复杂需求，触发「坦诚划界与验证后置」');
+    }
     if (matched.length === 0 || analysis.abstractness !== 'low') {
       if (allowed.includes('scene_restoration_probe')) {
         matched.push('scene_restoration_probe');
@@ -320,28 +373,57 @@ export function routeStrategy(
       matched.push('paraphrase_loop_confirm');
       reasons.push('检测到前后表述矛盾，触发「复述闭环确认」对齐事实');
     }
+    if (
+      (analysis.needsEngineeringTriage ||
+        analysis.rootCauseIdentified === 'engineering' ||
+        analysis.rootCauseIdentified === 'ai_architecture') &&
+      allowed.includes('ai_vs_engineering_triage')
+    ) {
+      matched.push('ai_vs_engineering_triage');
+      reasons.push('检测到常规软件工程或AI架构失配问题，触发「AI与常规工程分诊」避免拿AI杀鸡');
+    }
     if (allowed.includes('root_cause_distinction')) {
       matched.push('root_cause_distinction');
-      reasons.push('处于 S2 根因分析阶段，触发「根因深挖区分」区分人/系统/流程归属');
+      reasons.push('处于 S2 根因分析阶段，触发「根因深挖区分」区分人/常规工程/AI架构/流程归属');
     }
   } else if (targetStage === 'S3') {
+    if (analysis.needsSampleAnchor && allowed.includes('prototype_and_sample_anchor')) {
+      matched.push('prototype_and_sample_anchor');
+      reasons.push('客户关注改造方式/验证路径，触发「脱敏样例与存量改造锚定」');
+    }
     matched.push('boundary_constraints_confirm');
     const missing = getMissingBoundaries(boundaries).map((m) => m.label);
     reasons.push(
       missing.length > 0
         ? `处于 S3 边界确认阶段，尚缺 ${missing.join('、')}，触发「边界约束确认」`
-        : '五项边界核对中，确认无遗漏约束'
+        : '关键边界核对中，确认无遗漏约束'
     );
   } else if (targetStage === 'S4') {
     if (analysis.contradiction && allowed.includes('paraphrase_loop_confirm')) {
       matched.push('paraphrase_loop_confirm');
       reasons.push('收敛前存在歧义，触发「复述闭环确认」');
     }
+    if (analysis.needsHonestDefer && allowed.includes('honest_boundary_defer')) {
+      matched.push('honest_boundary_defer');
+      reasons.push('存在高复杂度/待验证项，触发「坦诚划界与验证后置」切分一二期');
+    }
     if (allowed.includes('pain_point_convergence')) {
       matched.push('pain_point_convergence');
       reasons.push('处于 S4 痛点收敛阶段，触发「痛点验证收口」请客户排优先级');
     }
   } else if (targetStage === 'S5') {
+    if (analysis.needsEngineeringTriage && allowed.includes('ai_vs_engineering_triage')) {
+      matched.push('ai_vs_engineering_triage');
+      reasons.push('方案阶段触发「AI与常规工程分诊」，拆清代码逻辑与Agent能力边界');
+    }
+    if (analysis.needsHonestDefer && allowed.includes('honest_boundary_defer')) {
+      matched.push('honest_boundary_defer');
+      reasons.push('方案阶段触发「坦诚划界与验证后置」，不硬包未验证难题');
+    }
+    if (analysis.needsSampleAnchor && allowed.includes('prototype_and_sample_anchor')) {
+      matched.push('prototype_and_sample_anchor');
+      reasons.push('方案阶段触发「脱敏样例与存量改造锚定」，先小步试跑不推倒重来');
+    }
     if (analysis.needsTechTranslation && allowed.includes('tech_concept_translation')) {
       matched.push('tech_concept_translation');
       reasons.push('涉及技术概念，触发「技术概念降维翻译」（发动机/汽油/改装件比喻库）');
@@ -394,6 +476,22 @@ export function computeRiskTags(
       label: '口径矛盾需澄清',
       level: 'high',
       reason: analysis.contradictionDetail || '客户前后表述存在矛盾，建议立即复述确认。',
+    });
+  }
+  if (analysis.needsEngineeringTriage || analysis.rootCauseIdentified === 'engineering') {
+    tags.push({
+      code: 'ENGINEERING_NOT_AI',
+      label: '先辨常规工程/AI架构',
+      level: 'medium',
+      reason: '该问题可能属于普通代码逻辑（如快照对比/超时限制）或AI用法不对，勿盲目堆大模型。',
+    });
+  }
+  if (analysis.needsHonestDefer) {
+    tags.push({
+      code: 'HIGH_UNCERTAINTY_SCOPE',
+      label: '高复杂度需验证后置',
+      level: 'high',
+      reason: '涉及历史脏数据语义清洗或跨行业图谱等不确定需求，切忌硬包承诺，建议放二期验证。',
     });
   }
   if (analysis.abstractness === 'high' && !analysis.vagueGrandDemand) {
@@ -451,95 +549,118 @@ export function deterministicGenerateQuestions(
   switch (primarySkill) {
     case 'interrupt_solution_first':
       candidates = [
-        '先不急着讨论具体用什么模型或技术方案，咱们先回到业务本身：现在团队每天最卡壳、最耗人的具体问题是什么？',
-        '技术选型我们后面一定结合实际来定；现在能不能先抛开工具，说说一线业务员目前最头疼的一个环节？',
-        '我先把您关心的技术路线记下来，但为了不给错药方，能先告诉我现在业务上具体哪里慢、哪里容易出错吗？',
-        '模型和架构都是手段，您现在最想通过这个项目解决掉哪一个具体的业务麻烦？',
+        '先不聊模型方案，现在业务上最卡壳的是哪一步？',
+        '抛开工具不谈，团队每天最耗人力的事是什么？',
+        '技术选型后面定，您最想先解决哪个具体麻烦？',
+        '现在业务流程里，最容易出错或返工的是哪儿？',
       ];
       break;
     case 'vague_demand_redirect':
       candidates = [
-        '这个整体愿景方向太大了，咱们一期很难一口吃成胖子；您能先挑一个最痛、最真实、明天就想解决的单一业务场景吗？',
-        '如果把宏大目标先切一小块落地，全公司里哪个部门的哪一个高频重复动作最值得咱们先打透？',
-        '为了保证项目能见效，咱们先不铺大摊子：您最希望先帮哪一类岗位解决哪一件具体的小事？',
-        '能举一个昨天刚发生的真实工作场景吗？我们从这一个单点切进去验证价值。',
+        '这个范围太大，先切一个明天最想解决的单点场景？',
+        '一期如果只打透一个高频动作，您最先选哪个？',
+        '能拿昨天最耗人工的一件具体小事举例吗？',
+        '哪个部门的哪一步最痛，咱们先从那一点切入？',
       ];
       break;
     case 'scene_restoration_probe':
       candidates =
         stage === 'S0'
           ? [
-              '感谢您的介绍，为了更贴合贵司实际情况，能带我看一个日常最典型的业务处理流程吗？平时大概是怎么流转的？',
-              '听下来这块业务确实很关键，您方便拿最近一周处理的一单具体业务为例，说说从开始到结束是怎么操作的吗？',
-              '目前团队在这一块每天投入人力最多的是哪几个环节？通常输入什么材料、最后要交付什么结果？',
-              '如果让您带一位新同事上手这项工作，最容易卡壳或者返工的是哪一步？',
+              '能拿最近一单业务举例，平时大概怎么流转？',
+              '这块业务里，目前最耗人工的是哪一步？',
+              '平时输入什么材料，最后要交付什么结果？',
+              '新人上手这项工作，最容易卡在哪一环？',
             ]
           : [
-              '您刚才提到现在用着不太顺手，能还原一次具体操作画面吗：员工上传/拿到什么材料→点了哪几步→原本期望出什么→实际出来是什么？',
-              '为了不理解偏差，能拿昨天发生的一单具体举例吗？输入的文件是什么格式，最后卡在哪个结果不满意？',
-              '在这个具体操作里，人工现在大概要花多长时间来补救或二次核对？最常出错的点在哪里？',
-              '除了刚才说的那一步，上下游衔接的时候还有没有需要人工来回复制粘贴的地方？',
+              '能还原下具体操作：上传什么、点哪步、卡在哪？',
+              '拿昨天的一单举例，期望出什么、实际出来什么？',
+              '这一步现在靠人工补救大概要花多长时间？',
+              '上下游衔接还有哪儿要手工复制粘贴？',
             ];
       break;
     case 'root_cause_distinction':
       candidates = [
-        `针对「${latestPain}」，想跟您一起拆一下根因：这主要是现有系统功能确实做不到，还是跨部门流程制度没拉齐，或者是人员操作习惯问题？`,
-        '如果今天把老系统原封不动换成一套新工具，但审批流程和填报口径不变，您觉得这个问题能解决几成？',
-        '平时出现返工或延误时，大家最常反馈的是“系统查不到/算不了”，还是“规则不清楚/等别人审批”？',
-        '有没有一部分其实是历史数据质量或填报规范不统一导致的，而不是纯技术功能缺失？',
+        `「${latestPain}」主要是系统做不到，还是流程或人的问题？`,
+        '如果只换工具不改审批流程，这问题能解决几成？',
+        '大家最常抱怨的是系统缺功能，还是规则没统一？',
+        '这里面有没有历史数据质量或填报口径的问题？',
+      ];
+      break;
+    case 'ai_vs_engineering_triage':
+      candidates = [
+        '这块其实写常规状态对比就行，不用硬上AI？',
+        '现在跑得慢是OCR耗太久，还是规则塞一条prompt了？',
+        '原系统是接口超时了，还是底层没接Agent拆分步骤？',
+        '如果先把工程逻辑改对，真正需要AI判断的是哪一步？',
+      ];
+      break;
+    case 'honest_boundary_defer':
+      candidates = [
+        '这块脏数据清洗没做过，先放二期小样例验证行吗？',
+        '这项跨领域需求复杂度高，一期先不打包可以吗？',
+        '我们坦诚说得先拿真实数据跑一遍，不贸然承诺？',
+        '一期先保确定见效的痛点，这块列为二期调研项？',
+      ];
+      break;
+    case 'prototype_and_sample_anchor':
+      candidates = [
+        '不推倒重来，就在您现有界面里嵌一层改造行吗？',
+        '不用大训练数据，能先给3-5份脱敏样例试跑吗？',
+        '现有系统不动前端，只把慢的解析引擎换掉行吗？',
+        '我们先拿20份真实单据跑个小原型看效果行吗？',
       ];
       break;
     case 'paraphrase_loop_confirm':
       candidates = [
         analysis.contradictionDetail
-          ? `我快速复述确认一下避免理解偏：${analysis.contradictionDetail}，这两边我们实际落地时以哪个硬约束为准？`
-          : `我复述一下刚对齐的重点：目前核心痛点是「${latestPain}」，根因偏向业务流程与系统衔接问题，我理解得对吗？`,
-        '我把刚才听到的几个关键信息串起来核对一遍，您帮我把把关，看看哪一点我理解偏了或者漏掉了？',
-        '刚才您前后提到了两个要求，在实际优先级上，如果二者不能兼得，您更倾向先保哪一边？',
-        '为了确保后面方案不跑偏，我记下来的这几点核心结论您看准确吗？',
+          ? `确认下冲突点：${analysis.contradictionDetail.slice(0, 18)}，以哪个为准？`
+          : `复述确认下：核心痛点是「${latestPain}」，对吗？`,
+        '刚才两个要求如果不能兼得，您优先保哪一边？',
+        '我刚记下的核心结论您看有没有理解偏？',
+        '这两处口径我们落地时统一按哪边执行？',
       ];
       break;
     case 'boundary_constraints_confirm': {
       const missingText =
         missingBoundaries.length > 0
-          ? missingBoundaries.map((m) => m.label).join('、')
-          : '数据位置、内外网、数据量、终端、保密要求';
+          ? missingBoundaries.slice(0, 3).map((m) => m.label).join('、')
+          : '数据、网络、数据量、终端、保密';
       candidates = [
-        `痛点和根因都很清楚了，聊方案前先确认几个硬边界（还差：${missingText}）：这些数据目前存在哪、是纯内网还是能连外网？`,
-        `另外再核对下落地条件：存量和日均数据量大概多大？一线员工主要在电脑还是手机端使用，保密合规有什么红线？`,
-        '这些业务数据是否要求绝对不出内网/本地机房？有没有等保或涉密等级方面的硬性验收要求？',
-        '日常使用这套能力的角色大概有多少人？他们平时高频使用的工作入口是浏览器、钉钉/企微还是专用内网客户端？',
+        `先核对硬边界（${missingText}）：数据在哪，纯内网吗？`,
+        '存量和日均数据量多大？员工用电脑还是手机？',
+        '数据是否要求绝对不出内网？保密等级是什么？',
+        '日常使用人数大概多少，主要从哪个系统入口进？',
       ];
       break;
     }
     case 'pain_point_convergence': {
       const summaryList =
-        painTitles.length > 0 ? painTitles.slice(0, 3).join('、') : '业务审核耗时、资料检索慢';
+        painTitles.length > 0 ? painTitles.slice(0, 2).join('、') : '核心痛点';
       candidates = [
-        `目前咱们已经梳理出这几个核心痛点（${summaryList}），如果一期只能先打透 1-2 个，您会怎么排优先级？`,
-        '结合刚刚确认的内外网与保密边界，这几个痛点里哪一个是领导最关注、上线后见效最快的 P0 项？',
-        '我把痛点清单和五项约束汇总复述一下：您看如果一期先聚焦排第一的痛点做闭环，二期再扩展其他环节，符合您的预期吗？',
-        '在排好优先级后，您对一期验收的量化指标（比如耗时缩短多少、准确率到多少）心里有大概标准吗？',
+        `梳理了「${summaryList}」，一期只能先做1个您怎么排？`,
+        '结合刚确认的边界，哪个痛点上线见效最快？',
+        '一期先闭环 P0 痛点、二期再扩，符合预期吗？',
+        '一期验收您最看重耗时缩短还是准确率提升？',
       ];
       break;
     }
     case 'tech_concept_translation': {
-      const analogy = TECH_ANALOGY_LIBRARY[0];
       candidates = [
-        `为了方便咱们同频，我打个通俗比方：大模型就像“${analogy.analogy}”，贵司内部业务数据是“汽油”，智能体工作流是“改装件和导航”，必须按您确认的边界配齐才能跑稳。这样解释您看清楚吗？`,
-        '其实落地时不需要关注复杂术语：我们把你们的内网知识库当“干净汽油”接给“发动机”，再用规则导航框住输出，确保既安全又不胡说。您对这种运行方式还有顾虑吗？',
-        '针对您关心的内网保密边界，相当于把整套车和油都放进贵司自己的封闭试车场里运行，数据全程不出门。您觉得这个架构贴合合规要求吗？',
-        '基于这个思路，您更看重先拿一个典型文档做小范围试跑验证，还是直接对接现有业务系统？',
+        '打个比方：大模型是汽油，Agent是发动机，Skill是改装件。',
+        '单次问答就像只给油没装车，换成Agent多轮核验才稳。',
+        '内网部署就是把车和油锁在自家园区跑，数据不出门。',
+        '这种运行方式您觉得贴合咱们的合规边界吗？',
       ];
       break;
     }
     case 'stage_progression_control':
     default:
       candidates = [
-        '前面的痛点优先级和五项边界都已经非常清晰了，接下来我围绕最高优痛点讲一下整体解决思路和一期落地切入点，您看可以吗？',
-        '方案大方向咱们基本对齐了，下一步建议先选 20-50 份典型脱敏样例做一次快速验证（POC），您看下周哪个时间方便安排对接？',
-        '除了今天参会的业务侧同事，下一步推进方案评审时，还需要拉上信息中心或保密合规的老师一起把关吗？',
-        '为了把今天的沟通落到实处，我稍后整理一份结构化纪要和待确认清单发您核对，您看还有哪些要点需要补充？',
+        '痛点和边界都齐了，接下来直接聊解决思路行吗？',
+        '下周方便选20份脱敏样例做一次快速验证吗？',
+        '下次方案评审还需要拉上信息中心或合规老师吗？',
+        '稍后我发份结构化纪要给您核对，还有补充吗？',
       ];
       break;
   }
@@ -645,6 +766,10 @@ export function mergeCheckpointState(
     dataVolume: analysis.extractedBoundaries.dataVolume ?? prev.boundaries.dataVolume,
     terminalType: analysis.extractedBoundaries.terminalType ?? prev.boundaries.terminalType,
     confidentiality: analysis.extractedBoundaries.confidentiality ?? prev.boundaries.confidentiality,
+    historicalDataStatus:
+      analysis.extractedBoundaries.historicalDataStatus ?? prev.boundaries.historicalDataStatus ?? null,
+    systemConstraints:
+      analysis.extractedBoundaries.systemConstraints ?? prev.boundaries.systemConstraints ?? null,
   };
 
   // Merge pain points without duplicates by title
@@ -708,6 +833,8 @@ export function mergeCheckpointState(
   if (mergedBoundaries.dataVolume) confirmedItems.add(`数据量级：${mergedBoundaries.dataVolume}`);
   if (mergedBoundaries.terminalType) confirmedItems.add(`使用终端：${mergedBoundaries.terminalType}`);
   if (mergedBoundaries.confidentiality) confirmedItems.add(`保密要求：${mergedBoundaries.confidentiality}`);
+  if (mergedBoundaries.historicalDataStatus) confirmedItems.add(`历史数据与样例：${mergedBoundaries.historicalDataStatus}`);
+  if (mergedBoundaries.systemConstraints) confirmedItems.add(`现网系统限制：${mergedBoundaries.systemConstraints}`);
 
   const stageGoalProgress =
     nextStage !== prev.currentStage
@@ -764,6 +891,8 @@ export function buildSummaryMarkdown(summary: Omit<MeetingSummary, 'markdown'>, 
     `- **数据量级**：${b.dataVolume ?? '待确认'}`,
     `- **使用终端**：${b.terminalType ?? '待确认'}`,
     `- **保密要求**：${b.confidentiality ?? '待确认'}`,
+    ...(b.historicalDataStatus ? [`- **历史数据与样例**：${b.historicalDataStatus}`] : []),
+    ...(b.systemConstraints ? [`- **现网系统限制**：${b.systemConstraints}`] : []),
     '',
     '## 四、待确认事项',
     ...(summary.unconfirmedItems.length > 0
