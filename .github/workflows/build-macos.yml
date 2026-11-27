@@ -13,8 +13,8 @@ permissions:
 
 jobs:
   build-macos:
-    name: Test & Build PreSalesCopilot.app (macOS 14 arm64)
-    runs-on: macos-14
+    name: Test & Build PreSalesCopilot.app (macOS arm64)
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
