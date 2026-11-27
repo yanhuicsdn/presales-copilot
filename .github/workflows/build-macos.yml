@@ -1,4 +1,4 @@
-name: Build macOS App (Apple Silicon)
+name: Build macOS App (Universal arm64 + x86_64)
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build-macos:
-    name: Test & Build PreSalesCopilot.app (macOS arm64)
+    name: Test & Build PreSalesCopilot.app (macOS Universal2)
     runs-on: macos-latest
 
     steps:
@@ -45,15 +45,15 @@ jobs:
           DYLD_LIBRARY_PATH="$(pwd)/Frameworks/sherpa-onnx.xcframework/macos-arm64_x86_64" \
             swift test --verbose
 
-      - name: Build release binary (Apple Silicon arm64)
+      - name: Build Universal2 release binary (Apple Silicon arm64 + Intel x86_64)
         working-directory: macos
-        run: swift build -c release --arch arm64
+        run: swift build -c release --arch arm64 --arch x86_64
 
-      - name: Package PreSalesCopilot.app bundle, ZIP & DMG
+      - name: Package PreSalesCopilot.app bundle, ZIP & DMG (Universal2)
         working-directory: macos
         run: |
           set -euo pipefail
-          BIN_PATH="$(swift build -c release --arch arm64 --show-bin-path)/PreSalesCopilot"
+          BIN_PATH="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/PreSalesCopilot"
           APP_DIR="dist/PreSalesCopilot.app"
           rm -rf dist
           mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources" "${APP_DIR}/Contents/Frameworks"
@@ -61,10 +61,9 @@ jobs:
           cp "${BIN_PATH}" "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
           chmod +x "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
 
-          # Embed arm64-thinned libsherpa-onnx-c-api.dylib (with static ONNX Runtime inside)
-          lipo -thin arm64 \
-            "Frameworks/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx-c-api.dylib" \
-            -output "${APP_DIR}/Contents/Frameworks/libsherpa-onnx-c-api.dylib"
+          # Embed full Universal2 (arm64 + x86_64) libsherpa-onnx-c-api.dylib (with static ONNX Runtime inside)
+          cp "Frameworks/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx-c-api.dylib" \
+            "${APP_DIR}/Contents/Frameworks/libsherpa-onnx-c-api.dylib"
           install_name_tool -id "@rpath/libsherpa-onnx-c-api.dylib" \
             "${APP_DIR}/Contents/Frameworks/libsherpa-onnx-c-api.dylib"
 
@@ -74,7 +73,9 @@ jobs:
           fi
           install_name_tool -add_rpath "@executable_path/../Frameworks" "${APP_DIR}/Contents/MacOS/PreSalesCopilot" 2>/dev/null || true
 
-          echo "=== Verifying dynamic library linkage ==="
+          echo "=== Verifying Universal2 architectures & dynamic library linkage ==="
+          lipo -info "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
+          lipo -info "${APP_DIR}/Contents/Frameworks/libsherpa-onnx-c-api.dylib"
           otool -L "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
 
           cat > "${APP_DIR}/Contents/PkgInfo" <<'EOF'
@@ -121,24 +122,24 @@ jobs:
           codesign --force --deep --sign - "${APP_DIR}"
           codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
 
-          # Package ZIP
-          (cd dist && ditto -c -k --sequesterRsrc --keepParent PreSalesCopilot.app PreSalesCopilot-macOS-arm64.zip)
+          # Package ZIP (Universal2: Apple Silicon + Intel)
+          (cd dist && ditto -c -k --sequesterRsrc --keepParent PreSalesCopilot.app PreSalesCopilot-macOS-Universal.zip)
 
-          # Package DMG
+          # Package DMG (Universal2: Apple Silicon + Intel)
           hdiutil create -volname "PreSalesCopilot" \
             -srcfolder "${APP_DIR}" \
             -ov -format UDZO \
-            "dist/PreSalesCopilot-macOS-arm64.dmg"
+            "dist/PreSalesCopilot-macOS-Universal.dmg"
 
           ls -lh dist/
 
       - name: Upload macOS App Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PreSalesCopilot-macOS-arm64
+          name: PreSalesCopilot-macOS-Universal
           path: |
-            macos/dist/PreSalesCopilot-macOS-arm64.zip
-            macos/dist/PreSalesCopilot-macOS-arm64.dmg
+            macos/dist/PreSalesCopilot-macOS-Universal.zip
+            macos/dist/PreSalesCopilot-macOS-Universal.dmg
           retention-days: 30
 
       - name: Publish GitHub Release
@@ -148,7 +149,7 @@ jobs:
         run: |
           TAG="macos-v2.1.${{ github.run_number }}"
           gh release create "${TAG}" \
-            macos/dist/PreSalesCopilot-macOS-arm64.zip \
-            macos/dist/PreSalesCopilot-macOS-arm64.dmg \
-            --title "PreSales Copilot macOS v2.1.${{ github.run_number }} (内置 Sherpa-ONNX + 自动下载 SenseVoice)" \
-            --notes "Apple Silicon (arm64) macOS 14+ 原生客户端 V2.1（方案 A）：已内置链接官方 Sherpa-ONNX v2.0.3 原生推理引擎，首次启动自动从国内镜像（HF-Mirror / HuggingFace）后台下载 int8 SenseVoice 模型并热切换；下载期间自动以 Apple 端侧离线语音兜底，原始音频 100% 保留本机。默认连接线上 V3.0 FDE 云端（https://presales.88886666.site）。"
+            macos/dist/PreSalesCopilot-macOS-Universal.zip \
+            macos/dist/PreSalesCopilot-macOS-Universal.dmg \
+            --title "PreSales Copilot macOS Universal v2.1.${{ github.run_number }} (Apple Silicon + Intel 通用版)" \
+            --notes "macOS 14+ 通用版客户端（同时原生支持 Apple Silicon M 芯片与 Intel x86_64 芯片，Universal2 二进制 + Universal2 Sherpa-ONNX v2.0.3 原生引擎）：首次启动自动从国内镜像（HF-Mirror / HuggingFace）后台下载 int8 SenseVoice 模型并热切换；下载期间自动以 Apple 端侧离线语音兜底，原始音频 100% 保留本机。默认连接线上 V3.0 FDE 云端（https://presales.88886666.site）。"
