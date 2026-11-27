@@ -20,6 +20,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Download official Sherpa-ONNX v2.0.3 iOS xcframework
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          mkdir -p Frameworks
+          curl -fsSL -o /tmp/sherpa-ios.zip \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/xcframework/sherpa-onnx-v2.0.3-ios-shared-onnxruntime-static.xcframework.zip"
+          unzip -q -o /tmp/sherpa-ios.zip -d Frameworks
+          rm -f /tmp/sherpa-ios.zip
+          ls -lh Frameworks/SherpaOnnxC.xcframework/
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
@@ -62,8 +73,17 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
 
+          APP_BUNDLE="build/device/Build/Products/Release-iphoneos/PreSalesCopilotIOS.app"
+          if [ ! -d "${APP_BUNDLE}/Frameworks/SherpaOnnxC.framework" ]; then
+            mkdir -p "${APP_BUNDLE}/Frameworks"
+            cp -R "Frameworks/SherpaOnnxC.xcframework/ios-arm64/SherpaOnnxC.framework" "${APP_BUNDLE}/Frameworks/"
+          fi
+          echo "=== Verifying iOS SherpaOnnxC.framework linkage & embed ==="
+          otool -L "${APP_BUNDLE}/PreSalesCopilotIOS" | grep -i sherpa || true
+          ls -lh "${APP_BUNDLE}/Frameworks/SherpaOnnxC.framework/"
+
           mkdir -p dist/Payload
-          cp -R build/device/Build/Products/Release-iphoneos/PreSalesCopilotIOS.app dist/Payload/
+          cp -R "${APP_BUNDLE}" dist/Payload/
           (cd dist && zip -qr PreSalesCopilot-iOS-arm64.ipa Payload)
           rm -rf dist/Payload
           ls -lh dist/
@@ -81,6 +101,12 @@ jobs:
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath build/sim \
             CODE_SIGNING_ALLOWED=NO
+
+          SIM_BUNDLE="build/sim/Build/Products/Release-iphonesimulator/PreSalesCopilotIOS.app"
+          if [ ! -d "${SIM_BUNDLE}/Frameworks/SherpaOnnxC.framework" ]; then
+            mkdir -p "${SIM_BUNDLE}/Frameworks"
+            cp -R "Frameworks/SherpaOnnxC.xcframework/ios-arm64_x86_64-simulator/SherpaOnnxC.framework" "${SIM_BUNDLE}/Frameworks/"
+          fi
 
           mkdir -p dist
           (cd build/sim/Build/Products/Release-iphonesimulator && ditto -c -k --sequesterRsrc --keepParent PreSalesCopilotIOS.app "${OUT_ZIP}")
@@ -100,9 +126,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="ios-v2.0.${{ github.run_number }}"
+          TAG="ios-v2.1.${{ github.run_number }}"
           gh release create "${TAG}" \
             ios/dist/PreSalesCopilot-iOS-arm64.ipa \
             ios/dist/PreSalesCopilot-iOS-Simulator.zip \
-            --title "PreSales Copilot iOS v2.0.${{ github.run_number }} (Omarchy极简按需提词版)" \
-            --notes "iOS 17+ (iPhone & iPad) 原生客户端 V2.0（与 Omarchy 客户端完全对齐）：极简深色单栏提词界面、后台端侧静默转写不刷屏、一键录音自动建组、底部拇指区「获取提问建议」按需调用线上 V3.0 FDE 12大Skill 引擎（https://presales.88886666.site）。包含未签名真机 .ipa 与模拟器包。"
+            --title "PreSales Copilot iOS v2.1.${{ github.run_number }} (内置 Sherpa-ONNX + 自动下载 SenseVoice)" \
+            --notes "iOS 17+ (iPhone & iPad) 原生客户端 V2.1（方案 A）：已内置链接官方 Sherpa-ONNX v2.0.3 原生推理框架，首次启动自动从国内镜像（HF-Mirror / HuggingFace）后台下载 int8 SenseVoice 模型并热切换；下载期间自动以 Apple 端侧离线语音兜底，原始音频 100% 保留本机。默认连接线上 V3.0 FDE 云端（https://presales.88886666.site）。"

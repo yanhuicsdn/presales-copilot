@@ -14,7 +14,7 @@ struct PreSalesCopilotApp: App {
 
         Settings {
             SettingsView(viewModel: viewModel)
-                .frame(width: 460, height: 320)
+                .frame(width: 500, height: 350)
         }
     }
 }
@@ -49,16 +49,26 @@ struct SettingsView: View {
                 }
             }
 
-            Section("隐私与本地语音引擎") {
+            Section("隐私与本地语音引擎（Sherpa-ONNX int8 SenseVoice）") {
                 Toggle("保留本地原始录音 WAV（仅存本机，绝不上传）", isOn: $viewModel.retainLocalAudioFile)
                 HStack {
                     Text(viewModel.modelStatus.displayText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("重新检测 SenseVoice") {
-                        viewModel.loadLocalModel()
+                    if case .downloading(let progress, let dlMB, let totMB, let mirror) = viewModel.modelDownloadState {
+                        Text("\(mirror) \(Int(progress * 100))% (\(dlMB)/\(totMB)MB)")
+                            .font(.caption.monospacedDigit())
+                        Button("取消") { viewModel.cancelModelDownload() }
+                    } else if viewModel.isSenseVoiceActive {
+                        Button("删除本地模型", role: .destructive) { viewModel.deleteLocalModel() }
+                    } else {
+                        Button("下载 SenseVoice int8 (~226MB)") { viewModel.startModelDownload() }
+                            .buttonStyle(.borderedProminent)
                     }
+                }
+                if case .downloading(let progress, _, _, _) = viewModel.modelDownloadState {
+                    ProgressView(value: progress)
                 }
             }
         }

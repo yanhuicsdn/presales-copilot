@@ -30,7 +30,17 @@ struct MainView: View {
             Rectangle().fill(lineCol).frame(height: 1)
             onDemandDock
 
-            Rectangle().fill(Color(red: 0.098, green: 0.110, blue: 0.141)).frame(height: 1)
+            if case .downloading(let progress, _, _, _) = viewModel.modelDownloadState {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Rectangle().fill(Color(red: 0.11, green: 0.13, blue: 0.18))
+                        Rectangle().fill(accent).frame(width: max(4, geo.size.width * CGFloat(progress)))
+                    }
+                }
+                .frame(height: 2)
+            } else {
+                Rectangle().fill(Color(red: 0.098, green: 0.110, blue: 0.141)).frame(height: 1)
+            }
             ultraThinStatusStrip
         }
         .background(bgCanvas.ignoresSafeArea())
@@ -425,9 +435,9 @@ struct MainView: View {
 
             HStack(spacing: 4) {
                 Circle()
-                    .fill(viewModel.isSpeechReady ? Color(red: 0.204, green: 0.827, blue: 0.600) : Color(red: 0.91, green: 0.78, blue: 0.42))
+                    .fill(viewModel.isSenseVoiceActive ? Color(red: 0.204, green: 0.827, blue: 0.600) : (viewModel.isSpeechReady ? accent : Color(red: 0.91, green: 0.78, blue: 0.42)))
                     .frame(width: 6, height: 6)
-                Text(viewModel.isTranscribing ? "转写中…" : "端侧就绪 · \(viewModel.capturedCount) 句")
+                Text(speechStatusLabel)
                     .font(.system(size: 10))
                     .foregroundStyle(Color(red: 0.420, green: 0.447, blue: 0.522))
                     .lineLimit(1)
@@ -445,6 +455,16 @@ struct MainView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
         .background(bgStatus)
+    }
+
+    private var speechStatusLabel: String {
+        if case .downloading(let progress, let dlMB, let totMB, _) = viewModel.modelDownloadState {
+            return "SenseVoice \(Int(progress * 100))% (\(dlMB)/\(totMB)MB)"
+        }
+        if viewModel.isTranscribing {
+            return "SenseVoice 转写中…"
+        }
+        return (viewModel.isSenseVoiceActive ? "SenseVoice 就绪" : "Apple 端侧就绪") + " · \(viewModel.capturedCount) 句"
     }
 }
 
@@ -514,14 +534,30 @@ struct SettingsSheet: View {
                     }
                 }
 
-                Section("端侧隐私与语音引擎") {
+                Section("端侧隐私与语音引擎（Sherpa-ONNX int8 SenseVoice）") {
                     Toggle("涉密离线模式（暂停云端 Agent）", isOn: $viewModel.offlineMode)
                     Toggle("保留本机原始录音 WAV（绝不上传）", isOn: $viewModel.retainLocalAudioFile)
-                    Text("端侧引擎：\(viewModel.speechMode.displayText)")
+                    Text("当前引擎：\(viewModel.speechMode.displayText)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("重新检测端侧语音引擎") {
-                        viewModel.redetectSpeechEngine()
+                    if case .downloading(let progress, let dlMB, let totMB, let mirror) = viewModel.modelDownloadState {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ProgressView(value: progress)
+                            HStack {
+                                Text("\(mirror) 下载中 \(Int(progress * 100))% (\(dlMB)/\(totMB) MB)")
+                                    .font(.caption.monospacedDigit())
+                                Spacer()
+                                Button("取消") { viewModel.cancelModelDownload() }
+                            }
+                        }
+                    } else if viewModel.isSenseVoiceActive {
+                        Button("删除本地 SenseVoice 模型 (~226MB)", role: .destructive) {
+                            viewModel.deleteLocalModel()
+                        }
+                    } else {
+                        Button("下载 SenseVoice int8 模型 (~226MB)") {
+                            viewModel.startModelDownload()
+                        }
                     }
                 }
             }

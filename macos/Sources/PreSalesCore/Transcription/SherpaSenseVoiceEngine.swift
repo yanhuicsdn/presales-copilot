@@ -62,6 +62,10 @@ public final class SherpaSenseVoiceEngine {
         unload()
     }
 
+    public static var isNativeSherpaLinked: Bool {
+        presales_sherpa_is_native_linked() == 1
+    }
+
     public static var defaultModelDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return appSupport.appendingPathComponent("PreSalesCopilot/models/sensevoice-int8", isDirectory: true)

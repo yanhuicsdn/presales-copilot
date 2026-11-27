@@ -123,4 +123,17 @@ final class PreSalesCoreTests: XCTestCase {
             "第二句。"
         )
     }
+
+    func testSenseVoiceModelDownloaderValidationAndNativeLinkCheck() {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sv_dl_test_\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        XCTAssertFalse(SenseVoiceModelDownloader.hasCompleteModel(in: tmpDir))
+        XCTAssertEqual(SenseVoiceModelDownloader.defaultMirrors.count, 2)
+
+        if ProcessInfo.processInfo.environment["EXPECT_NATIVE_SHERPA"] == "1" {
+            XCTAssertTrue(SherpaSenseVoiceEngine.isNativeSherpaLinked, "Expected native Sherpa-ONNX xcframework to be linked in CI")
+        }
+    }
 }

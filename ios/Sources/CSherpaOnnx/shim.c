@@ -3,7 +3,11 @@
 #include <string.h>
 
 #ifdef SHERPA_ONNX_LINKED
+#if __has_include(<SherpaOnnxC/sherpa-onnx/c-api/c-api.h>)
+#include <SherpaOnnxC/sherpa-onnx/c-api/c-api.h>
+#else
 #include "sherpa-onnx/c-api/c-api.h"
+#endif
 
 struct PreSalesIOSSherpaHandle {
     const SherpaOnnxOfflineRecognizer *recognizer;

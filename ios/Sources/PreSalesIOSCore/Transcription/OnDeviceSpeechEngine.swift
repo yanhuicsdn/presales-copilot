@@ -46,6 +46,10 @@ public final class OnDeviceSpeechEngine {
         unload()
     }
 
+    public static var isNativeSherpaLinked: Bool {
+        presales_ios_sherpa_is_native_linked() == 1
+    }
+
     public static var defaultModelDirectory: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         return docs.appendingPathComponent("models/sensevoice-int8", isDirectory: true)

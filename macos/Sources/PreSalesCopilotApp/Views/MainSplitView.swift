@@ -33,7 +33,17 @@ struct MainSplitView: View {
                 Rectangle().fill(lineCol).frame(height: 1)
                 onDemandActionBar
 
-                Rectangle().fill(Color(red: 0.098, green: 0.110, blue: 0.141)).frame(height: 1)
+                if case .downloading(let progress, _, _, _) = viewModel.modelDownloadState {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Rectangle().fill(Color(red: 0.11, green: 0.13, blue: 0.18))
+                            Rectangle().fill(accent).frame(width: max(4, geo.size.width * CGFloat(progress)))
+                        }
+                    }
+                    .frame(height: 2)
+                } else {
+                    Rectangle().fill(Color(red: 0.098, green: 0.110, blue: 0.141)).frame(height: 1)
+                }
                 ultraThinStatusStrip
             }
             .background(bgCanvas)
@@ -437,13 +447,12 @@ struct MainSplitView: View {
 
             HStack(spacing: 5) {
                 Circle()
-                    .fill(viewModel.modelStatus.isReady ? Color(red: 0.204, green: 0.827, blue: 0.600) : Color(red: 0.91, green: 0.78, blue: 0.42))
+                    .fill(viewModel.isSenseVoiceActive ? Color(red: 0.204, green: 0.827, blue: 0.600) : (viewModel.modelStatus.isReady ? accent : Color(red: 0.91, green: 0.78, blue: 0.42)))
                     .frame(width: 6, height: 6)
-                Text(viewModel.isTranscribing
-                     ? "本地转写中…"
-                     : "\(viewModel.modelStatus.displayText) · 已采集 \(viewModel.capturedCount) 句")
+                Text(speechStatusLabel)
                     .font(.system(size: 10))
                     .foregroundStyle(Color(red: 0.420, green: 0.447, blue: 0.522))
+                    .lineLimit(1)
             }
 
             Spacer()
@@ -458,6 +467,16 @@ struct MainSplitView: View {
         .padding(.horizontal, 14)
         .frame(height: 24)
         .background(bgStatus)
+    }
+
+    private var speechStatusLabel: String {
+        if case .downloading(let progress, let dlMB, let totMB, _) = viewModel.modelDownloadState {
+            return "SenseVoice 下载中 \(Int(progress * 100))% (\(dlMB)/\(totMB)MB)"
+        }
+        if viewModel.isTranscribing {
+            return "SenseVoice 本地转写中…"
+        }
+        return "\(viewModel.modelStatus.displayText) · 已采集 \(viewModel.capturedCount) 句"
     }
 
     // MARK: - Sheets & Overlays

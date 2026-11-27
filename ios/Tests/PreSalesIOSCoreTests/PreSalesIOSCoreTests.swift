@@ -128,4 +128,13 @@ final class PreSalesIOSCoreTests: XCTestCase {
         )
         XCTAssertEqual(b.confirmedCoreCount, 5)
     }
+
+    func testSenseVoiceModelDownloaderValidation() {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ios_sv_dl_test_\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        XCTAssertFalse(SenseVoiceModelDownloader.hasCompleteModel(in: tmpDir))
+        XCTAssertEqual(SenseVoiceModelDownloader.defaultMirrors.count, 2)
+    }
 }

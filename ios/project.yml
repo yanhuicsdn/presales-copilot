@@ -8,8 +8,8 @@ settings:
     SWIFT_VERSION: "5.9"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     TARGETED_DEVICE_FAMILY: "1,2"
-    MARKETING_VERSION: "2.0.0"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "2.1.0"
+    CURRENT_PROJECT_VERSION: "3"
 
 packages:
   PreSalesIOSKit:
@@ -32,8 +32,8 @@ targets:
       path: Sources/PreSalesCopilotIOSApp/Info.plist
       properties:
         CFBundleDisplayName: "售前智问分身"
-        CFBundleShortVersionString: "2.0.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "2.1.0"
+        CFBundleVersion: "3"
         UIBackgroundModes:
           - audio
         NSMicrophoneUsageDescription: "售前智问分身需要访问麦克风以在 iPhone 本地完成实时语音转写，原始音频绝不离开本机。"

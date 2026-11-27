@@ -26,9 +26,24 @@ jobs:
           swift --version
           uname -m
 
-      - name: Run PreSalesCore unit tests (swift test)
+      - name: Download official Sherpa-ONNX v2.0.3 macOS xcframework
         working-directory: macos
-        run: swift test --verbose
+        run: |
+          set -euo pipefail
+          mkdir -p Frameworks
+          curl -fsSL -o /tmp/sherpa-macos.zip \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/xcframework/sherpa-onnx-v2.0.3-macos-shared-onnxruntime-static.xcframework.zip"
+          unzip -q -o /tmp/sherpa-macos.zip -d Frameworks
+          rm -f /tmp/sherpa-macos.zip
+          ls -lh Frameworks/sherpa-onnx.xcframework/macos-arm64_x86_64/
+
+      - name: Run PreSalesCore unit tests (swift test with native Sherpa-ONNX)
+        working-directory: macos
+        env:
+          EXPECT_NATIVE_SHERPA: "1"
+        run: |
+          DYLD_LIBRARY_PATH="$(pwd)/Frameworks/sherpa-onnx.xcframework/macos-arm64_x86_64" \
+            swift test --verbose
 
       - name: Build release binary (Apple Silicon arm64)
         working-directory: macos
@@ -41,10 +56,26 @@ jobs:
           BIN_PATH="$(swift build -c release --arch arm64 --show-bin-path)/PreSalesCopilot"
           APP_DIR="dist/PreSalesCopilot.app"
           rm -rf dist
-          mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
+          mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources" "${APP_DIR}/Contents/Frameworks"
 
           cp "${BIN_PATH}" "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
           chmod +x "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
+
+          # Embed arm64-thinned libsherpa-onnx-c-api.dylib (with static ONNX Runtime inside)
+          lipo -thin arm64 \
+            "Frameworks/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx-c-api.dylib" \
+            -output "${APP_DIR}/Contents/Frameworks/libsherpa-onnx-c-api.dylib"
+          install_name_tool -id "@rpath/libsherpa-onnx-c-api.dylib" \
+            "${APP_DIR}/Contents/Frameworks/libsherpa-onnx-c-api.dylib"
+
+          OLD_DEP=$(otool -L "${APP_DIR}/Contents/MacOS/PreSalesCopilot" | awk '/libsherpa-onnx-c-api\.dylib/{print $1}' | head -n 1 || true)
+          if [ -n "${OLD_DEP}" ] && [ "${OLD_DEP}" != "@rpath/libsherpa-onnx-c-api.dylib" ]; then
+            install_name_tool -change "${OLD_DEP}" "@rpath/libsherpa-onnx-c-api.dylib" "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
+          fi
+          install_name_tool -add_rpath "@executable_path/../Frameworks" "${APP_DIR}/Contents/MacOS/PreSalesCopilot" 2>/dev/null || true
+
+          echo "=== Verifying dynamic library linkage ==="
+          otool -L "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
 
           cat > "${APP_DIR}/Contents/PkgInfo" <<'EOF'
           APPL????
@@ -70,9 +101,9 @@ jobs:
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>CFBundleShortVersionString</key>
-            <string>2.0.0</string>
+            <string>2.1.0</string>
             <key>CFBundleVersion</key>
-            <string>2</string>
+            <string>3</string>
             <key>LSMinimumSystemVersion</key>
             <string>14.0</string>
             <key>NSHighResolutionCapable</key>
@@ -85,9 +116,10 @@ jobs:
           </plist>
           EOF
 
-          # Ad-hoc code sign for local launch on Apple Silicon Macs
+          # Ad-hoc code sign embedded framework first, then app bundle
+          codesign --force --sign - "${APP_DIR}/Contents/Frameworks/libsherpa-onnx-c-api.dylib"
           codesign --force --deep --sign - "${APP_DIR}"
-          codesign --verify --verbose=2 "${APP_DIR}"
+          codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
 
           # Package ZIP
           (cd dist && ditto -c -k --sequesterRsrc --keepParent PreSalesCopilot.app PreSalesCopilot-macOS-arm64.zip)
@@ -114,9 +146,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="macos-v2.0.${{ github.run_number }}"
+          TAG="macos-v2.1.${{ github.run_number }}"
           gh release create "${TAG}" \
             macos/dist/PreSalesCopilot-macOS-arm64.zip \
             macos/dist/PreSalesCopilot-macOS-arm64.dmg \
-            --title "PreSales Copilot macOS v2.0.${{ github.run_number }} (Omarchy极简按需提词版)" \
-            --notes "Apple Silicon (arm64) macOS 14+ 原生客户端 V2.0（与 Omarchy 客户端完全对齐）：极简深色单栏提词界面、后台端侧静默转写不刷屏、一键录音自动建组、按需点击「获取提问建议」（或快捷键 G/Return）调用线上 V3.0 FDE 12大Skill 引擎（https://presales.88886666.site）。"
+            --title "PreSales Copilot macOS v2.1.${{ github.run_number }} (内置 Sherpa-ONNX + 自动下载 SenseVoice)" \
+            --notes "Apple Silicon (arm64) macOS 14+ 原生客户端 V2.1（方案 A）：已内置链接官方 Sherpa-ONNX v2.0.3 原生推理引擎，首次启动自动从国内镜像（HF-Mirror / HuggingFace）后台下载 int8 SenseVoice 模型并热切换；下载期间自动以 Apple 端侧离线语音兜底，原始音频 100% 保留本机。默认连接线上 V3.0 FDE 云端（https://presales.88886666.site）。"

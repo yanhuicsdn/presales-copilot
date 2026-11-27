@@ -50,6 +50,7 @@ public final class CopilotViewModel: ObservableObject {
     }
     @Published public var cloudBaseURLString: String
     @Published public var modelStatus: SherpaSenseVoiceEngine.ModelStatus = .unloaded
+    @Published public var modelDownloadState: SenseVoiceModelDownloader.DownloadState = .idle
     @Published public var pendingQueueCount = 0
     @Published public var statusMessage: String = ""
 
@@ -61,6 +62,7 @@ public final class CopilotViewModel: ObservableObject {
 
     private let audioManager = AudioCaptureManager()
     private let sherpaEngine = SherpaSenseVoiceEngine()
+    private let modelDownloader = SenseVoiceModelDownloader()
     private var syncClient: CloudSyncClient
     private var currentSessionId: String?
     private var nextSeq: Int = 1
@@ -85,6 +87,11 @@ public final class CopilotViewModel: ObservableObject {
         Task {
             await fetchHealth()
             await refreshGroups()
+            if SherpaSenseVoiceEngine.isNativeSherpaLinked &&
+                !SenseVoiceModelDownloader.hasCompleteModel(in: SherpaSenseVoiceEngine.defaultModelDirectory) &&
+                !offlineMode {
+                startModelDownload()
+            }
         }
     }
 
@@ -104,8 +111,54 @@ public final class CopilotViewModel: ObservableObject {
         capturedCount > 0 && !isAnalyzing && !offlineMode && selectedGroupId != nil
     }
 
+    public var isSenseVoiceActive: Bool {
+        if case .ready(let nativeLinked, _) = modelStatus {
+            return nativeLinked
+        }
+        return false
+    }
+
     public func loadLocalModel() {
         modelStatus = sherpaEngine.loadModel()
+        if SenseVoiceModelDownloader.hasCompleteModel(in: SherpaSenseVoiceEngine.defaultModelDirectory) {
+            modelDownloadState = .completed
+        }
+    }
+
+    public func startModelDownload() {
+        if case .downloading = modelDownloadState { return }
+        guard !offlineMode else {
+            setStatus("离线模式下无法下载模型，请先关闭涉密离线模式")
+            return
+        }
+        setStatus("正在后台下载 int8 SenseVoice 模型 (~226MB)...")
+        Task {
+            let ok = await modelDownloader.downloadIfNeeded(to: SherpaSenseVoiceEngine.defaultModelDirectory)
+            if ok {
+                let wasRecording = self.isRecording
+                if wasRecording {
+                    self.sherpaEngine.stopAppleOnDeviceStream()
+                }
+                self.loadLocalModel()
+                self.setStatus("Sherpa-ONNX int8 SenseVoice 已就绪")
+            }
+        }
+    }
+
+    public func cancelModelDownload() {
+        modelDownloader.cancel()
+        setStatus("已取消 SenseVoice 模型下载")
+    }
+
+    public func deleteLocalModel() {
+        do {
+            sherpaEngine.unload()
+            try modelDownloader.deleteModel(in: SherpaSenseVoiceEngine.defaultModelDirectory)
+            loadLocalModel()
+            setStatus("已删除本地 SenseVoice 模型（已切换回 Apple 端侧语音）")
+        } catch {
+            setStatus("删除模型失败：\(error.localizedDescription)")
+        }
     }
 
     public func fetchHealth() async {
@@ -410,6 +463,15 @@ public final class CopilotViewModel: ObservableObject {
     }
 
     private func wireCallbacks() {
+        modelDownloader.onStateChanged = { [weak self] st in
+            Task { @MainActor in
+                self?.modelDownloadState = st
+                if case .failed(let err) = st {
+                    self?.setStatus("模型下载失败（当前用 Apple 端侧兜底）：\(err)")
+                }
+            }
+        }
+
         audioManager.onAudioLevel = { [weak self] rms in
             Task { @MainActor in
                 self?.audioLevel = min(1.0, rms * 10.0)
