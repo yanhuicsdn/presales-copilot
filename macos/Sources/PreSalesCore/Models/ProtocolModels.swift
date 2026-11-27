@@ -113,6 +113,34 @@ public struct TranscriptSegment: Codable, Identifiable, Equatable, Sendable {
     public let endedAt: Int64
     public let isFinal: Bool
     public let createdAt: Int64
+
+    public init(
+        id: String,
+        groupId: String,
+        sessionId: String,
+        seq: Int,
+        text: String,
+        originalText: String? = nil,
+        edited: Bool = false,
+        speakerLabel: String? = nil,
+        startedAt: Int64,
+        endedAt: Int64,
+        isFinal: Bool = true,
+        createdAt: Int64
+    ) {
+        self.id = id
+        self.groupId = groupId
+        self.sessionId = sessionId
+        self.seq = seq
+        self.text = text
+        self.originalText = originalText
+        self.edited = edited
+        self.speakerLabel = speakerLabel
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.isFinal = isFinal
+        self.createdAt = createdAt
+    }
 }
 
 public struct OutgoingSegmentPayload: Codable, Equatable, Identifiable, Sendable {
