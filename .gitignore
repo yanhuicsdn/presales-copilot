@@ -1,0 +1,21 @@
+# Node / Next.js
+node_modules/
+.next/
+cloud/data/
+*.tsbuildinfo
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.local
+*.log
+
+# Swift / macOS
+macos/.build/
+macos/.swiftpm/
+macos/Frameworks/
+macos/*.xcodeproj/
+macos/build/
+macos/dist/
+*.dmg
+.DS_Store

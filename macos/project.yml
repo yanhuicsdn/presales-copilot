@@ -1,0 +1,44 @@
+name: PreSalesCopilot
+options:
+  bundleIdPrefix: com.presalescopilot
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "15.4"
+settings:
+  base:
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: YES
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  PreSalesCopilot:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/CSherpaOnnx
+      - path: Sources/PreSalesCore
+      - path: Sources/PreSalesCopilotApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.presalescopilot.macos
+        INFOPLIST_KEY_CFBundleDisplayName: "售前智问分身"
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "售前智问分身需要访问麦克风以在 Mac 本地完成实时语音转写，原始音频绝不离开本机。"
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/CSherpaOnnx/include/c-api-bridge.h
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/Sources/CSherpaOnnx/include"
+          - "$(SRCROOT)/Frameworks/sherpa-onnx.xcframework/macos-arm64_x86_64/Headers"
+        OTHER_LDFLAGS:
+          - "-lc++"
+    dependencies:
+      - framework: Frameworks/sherpa-onnx.xcframework
+        embed: true
+        codeSign: true
+        optional: true
+  PreSalesCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/PreSalesCoreTests
+    dependencies:
+      - target: PreSalesCopilot

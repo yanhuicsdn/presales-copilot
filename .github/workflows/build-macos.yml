@@ -1,0 +1,120 @@
+name: Build macOS App (Apple Silicon)
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'macos/**'
+      - '.github/workflows/build-macos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Test & Build PreSalesCopilot.app (macOS 14 arm64)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Swift & macOS toolchain versions
+        run: |
+          sw_vers
+          swift --version
+          uname -m
+
+      - name: Run PreSalesCore unit tests (swift test)
+        working-directory: macos
+        run: swift test --verbose
+
+      - name: Build release binary (Apple Silicon arm64)
+        working-directory: macos
+        run: swift build -c release --arch arm64
+
+      - name: Package PreSalesCopilot.app bundle, ZIP & DMG
+        working-directory: macos
+        run: |
+          set -euo pipefail
+          BIN_PATH="$(swift build -c release --arch arm64 --show-bin-path)/PreSalesCopilot"
+          APP_DIR="dist/PreSalesCopilot.app"
+          rm -rf dist
+          mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
+
+          cp "${BIN_PATH}" "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
+          chmod +x "${APP_DIR}/Contents/MacOS/PreSalesCopilot"
+
+          cat > "${APP_DIR}/Contents/PkgInfo" <<'EOF'
+          APPL????
+          EOF
+
+          cat > "${APP_DIR}/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDevelopmentRegion</key>
+            <string>zh_CN</string>
+            <key>CFBundleDisplayName</key>
+            <string>售前智问分身</string>
+            <key>CFBundleExecutable</key>
+            <string>PreSalesCopilot</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.presalescopilot.macos</string>
+            <key>CFBundleInfoDictionaryVersion</key>
+            <string>6.0</string>
+            <key>CFBundleName</key>
+            <string>PreSalesCopilot</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0.0</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>14.0</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+            <key>NSMicrophoneUsageDescription</key>
+            <string>售前智问分身需要访问麦克风以在 Mac 本地完成实时语音转写，原始音频绝不离开本机。</string>
+          </dict>
+          </plist>
+          EOF
+
+          # Ad-hoc code sign for local launch on Apple Silicon Macs
+          codesign --force --deep --sign - "${APP_DIR}"
+          codesign --verify --verbose=2 "${APP_DIR}"
+
+          # Package ZIP
+          (cd dist && ditto -c -k --sequesterRsrc --keepParent PreSalesCopilot.app PreSalesCopilot-macOS-arm64.zip)
+
+          # Package DMG
+          hdiutil create -volname "PreSalesCopilot" \
+            -srcfolder "${APP_DIR}" \
+            -ov -format UDZO \
+            "dist/PreSalesCopilot-macOS-arm64.dmg"
+
+          ls -lh dist/
+
+      - name: Upload macOS App Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PreSalesCopilot-macOS-arm64
+          path: |
+            macos/dist/PreSalesCopilot-macOS-arm64.zip
+            macos/dist/PreSalesCopilot-macOS-arm64.dmg
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="macos-v1.0.${{ github.run_number }}"
+          gh release create "${TAG}" \
+            macos/dist/PreSalesCopilot-macOS-arm64.zip \
+            macos/dist/PreSalesCopilot-macOS-arm64.dmg \
+            --title "PreSales Copilot macOS v1.0.${{ github.run_number }}" \
+            --notes "Apple Silicon (arm64) macOS 14+ 原生客户端构建产物。已默认指向云端服务 https://presales.88886666.site 。"

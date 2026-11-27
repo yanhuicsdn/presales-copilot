@@ -1,0 +1,40 @@
+name: Cloud Agent CI (Next.js + Mastra)
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'cloud/**'
+      - '.github/workflows/ci-cloud.yml'
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    name: Typecheck, Unit/E2E Tests & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run Vitest unit & E2E integration tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
