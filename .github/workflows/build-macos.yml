@@ -70,15 +70,17 @@ jobs:
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>CFBundleShortVersionString</key>
-            <string>1.0.0</string>
+            <string>2.0.0</string>
             <key>CFBundleVersion</key>
-            <string>1</string>
+            <string>2</string>
             <key>LSMinimumSystemVersion</key>
             <string>14.0</string>
             <key>NSHighResolutionCapable</key>
             <true/>
             <key>NSMicrophoneUsageDescription</key>
-            <string>售前智问分身需要访问麦克风以在 Mac 本地完成实时语音转写，原始音频绝不离开本机。</string>
+            <string>售前智问分身需要访问麦克风以在 Mac 本地完成静默语音转写，原始音频绝不离开本机。</string>
+            <key>NSSpeechRecognitionUsageDescription</key>
+            <string>售前智问分身使用端侧语音识别将现场沟通转为文字，音频全程保留在本地。</string>
           </dict>
           </plist>
           EOF
@@ -112,9 +114,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="macos-v1.0.${{ github.run_number }}"
+          TAG="macos-v2.0.${{ github.run_number }}"
           gh release create "${TAG}" \
             macos/dist/PreSalesCopilot-macOS-arm64.zip \
             macos/dist/PreSalesCopilot-macOS-arm64.dmg \
-            --title "PreSales Copilot macOS v1.0.${{ github.run_number }}" \
-            --notes "Apple Silicon (arm64) macOS 14+ 原生客户端构建产物。已默认指向云端服务 https://presales.88886666.site 。"
+            --title "PreSales Copilot macOS v2.0.${{ github.run_number }} (Omarchy极简按需提词版)" \
+            --notes "Apple Silicon (arm64) macOS 14+ 原生客户端 V2.0（与 Omarchy 客户端完全对齐）：极简深色单栏提词界面、后台端侧静默转写不刷屏、一键录音自动建组、按需点击「获取提问建议」（或快捷键 G/Return）调用线上 V3.0 FDE 12大Skill 引擎（https://presales.88886666.site）。"

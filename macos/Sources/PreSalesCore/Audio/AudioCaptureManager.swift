@@ -26,6 +26,9 @@ public final class AudioCaptureManager {
 
     public var onSpeechChunk: ((VADChunker.SpeechChunk) -> Void)?
     public var onAudioLevel: ((Float) -> Void)?
+    #if os(macOS)
+    public var onRawPCMBuffer: ((AVAudioPCMBuffer) -> Void)?
+    #endif
     public private(set) var isRecording = false
     public private(set) var isPaused = false
     public private(set) var lastLocalRecordingURL: URL?
@@ -81,6 +84,7 @@ public final class AudioCaptureManager {
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
+            self.onRawPCMBuffer?(buffer)
             let ratio = targetFormat.sampleRate / inputFormat.sampleRate
             let targetFrames = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
             guard let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: targetFrames) else {

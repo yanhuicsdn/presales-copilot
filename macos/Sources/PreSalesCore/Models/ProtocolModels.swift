@@ -46,19 +46,31 @@ public struct BoundaryConstraints: Codable, Equatable, Sendable {
     public var dataVolume: String?
     public var terminalType: String?
     public var confidentiality: String?
+    public var historicalDataStatus: String?
+    public var systemConstraints: String?
 
     public init(
         dataLocation: String? = nil,
         networkType: String? = nil,
         dataVolume: String? = nil,
         terminalType: String? = nil,
-        confidentiality: String? = nil
+        confidentiality: String? = nil,
+        historicalDataStatus: String? = nil,
+        systemConstraints: String? = nil
     ) {
         self.dataLocation = dataLocation
         self.networkType = networkType
         self.dataVolume = dataVolume
         self.terminalType = terminalType
         self.confidentiality = confidentiality
+        self.historicalDataStatus = historicalDataStatus
+        self.systemConstraints = systemConstraints
+    }
+
+    public var confirmedCoreCount: Int {
+        [dataLocation, networkType, dataVolume, terminalType, confidentiality]
+            .filter { ($0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) }
+            .count
     }
 }
 
@@ -228,6 +240,12 @@ public struct MeetingSummary: Codable, Identifiable, Equatable, Sendable {
     public let createdAt: Int64
 }
 
+public struct CloudHealthInfo: Decodable, Equatable, Sendable {
+    public let status: String
+    public let providerMode: String?
+    public let model: String?
+}
+
 // MARK: - WebSocket Envelopes (1:1 contract with Cloud Next.js Gateway)
 
 public struct ServerWsEnvelope: Decodable {
@@ -245,4 +263,26 @@ public struct ServerWsEnvelope: Decodable {
     public let previousStage: StageCode?
     public let code: String?
     public let message: String?
+}
+
+// MARK: - V3.0 FDE 12 Skills Display Names (Aligned with Omarchy & Cloud)
+
+public enum SkillDisplayNames {
+    public static func label(for skillId: String) -> String {
+        switch skillId {
+        case "interrupt_solution_first": return "打断方案先行"
+        case "scene_restoration_probe": return "场景还原追问"
+        case "root_cause_distinction": return "四维根因深挖"
+        case "ai_vs_engineering_triage": return "AI与常规工程分诊"
+        case "boundary_constraints_confirm": return "七项边界约束确认"
+        case "paraphrase_loop_confirm": return "复述闭环确认"
+        case "vague_demand_redirect": return "模糊需求拒接引导"
+        case "pain_point_convergence": return "痛点验证收口"
+        case "honest_boundary_defer": return "坦诚划界与验证后置"
+        case "tech_concept_translation": return "技术概念降维翻译"
+        case "prototype_and_sample_anchor": return "脱敏样例与存量改造锚定"
+        case "stage_progression_control": return "阶段推进控制"
+        default: return skillId
+        }
+    }
 }

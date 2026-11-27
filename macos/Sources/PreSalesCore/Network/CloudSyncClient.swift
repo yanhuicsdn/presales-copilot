@@ -8,6 +8,9 @@ public enum CloudConnectionState: Equatable, Sendable {
 }
 
 /// Manages WebSocket streaming + HTTP catch-up with the Next.js + Mastra Cloud Agent Service.
+/// Matches the Omarchy client contract:
+/// - Silently uploads local transcribed text with `autoAnalyze: false` by default
+/// - Fetches concise short prompts on demand via WS `request_hint` (with HTTP `/analyze` fallback)
 /// Privacy guarantee: Only UTF-8 transcript text and JSON control messages are ever transmitted.
 public final class CloudSyncClient: @unchecked Sendable {
     public var baseHTTPURL: URL
@@ -26,7 +29,7 @@ public final class CloudSyncClient: @unchecked Sendable {
     public var isOfflineMode: Bool = false {
         didSet {
             if isOfflineMode {
-                disconnect()
+                disconnectInternal()
                 connectionState = .offlineConfidential
             } else if let groupId = subscribedGroupId {
                 connect(groupId: groupId)
@@ -79,7 +82,7 @@ public final class CloudSyncClient: @unchecked Sendable {
         startReceiveLoop(task: task)
 
         Task {
-            await flushPendingQueue(groupId: groupId)
+            await flushPendingQueue(groupId: groupId, triggerAnalyze: false)
         }
     }
 
@@ -97,8 +100,8 @@ public final class CloudSyncClient: @unchecked Sendable {
     }
 
     /// Sends a transcribed text segment (pure text only).
-    /// Always enqueues locally first; dequeued only upon cloud ACK or HTTP 200 catch-up.
-    public func sendSegment(_ segment: OutgoingSegmentPayload) async {
+    /// Defaults to `autoAnalyze = false` to mirror Omarchy's silent capture & on-demand hint UX.
+    public func sendSegment(_ segment: OutgoingSegmentPayload, autoAnalyze: Bool = false) async {
         await pendingQueue.enqueue(segment)
         guard !isOfflineMode else { return }
 
@@ -112,35 +115,61 @@ public final class CloudSyncClient: @unchecked Sendable {
                 "text": segment.text,
                 "startedAt": segment.startedAt,
                 "endedAt": segment.endedAt,
-                "isFinal": segment.isFinal
+                "isFinal": segment.isFinal,
+                "autoAnalyze": autoAnalyze
             ]
             sendRawJSON(payload)
         } else {
-            await flushPendingQueue(groupId: segment.groupId)
+            await flushPendingQueue(groupId: segment.groupId, triggerAnalyze: autoAnalyze)
         }
     }
 
-    /// Re-uploads manually edited transcript text (Section 10: manual correction).
-    public func editSegment(groupId: String, segmentId: String, newText: String) async throws {
-        guard !isOfflineMode else { return }
-        let url = baseHTTPURL.appendingPathComponent("api/groups/\(groupId)/segments")
+    /// Triggers an on-demand concise question hint from the cloud V3.0 FDE Agent.
+    /// Uses WebSocket `request_hint` when connected, falling back to HTTP `POST /api/groups/:id/analyze`.
+    public func requestHint(groupId: String, sessionId: String?) async throws -> (QuestionCard?, GroupCheckpoint?) {
+        guard !isOfflineMode else { return (nil, nil) }
+
+        if connectionState == .connected, webSocketTask != nil {
+            var frame: [String: Any] = [
+                "type": "request_hint",
+                "groupId": groupId
+            ]
+            if let sessionId, !sessionId.isEmpty {
+                frame["sessionId"] = sessionId
+            }
+            sendRawJSON(frame)
+            return (nil, nil)
+        }
+
+        let url = baseHTTPURL.appendingPathComponent("api/groups/\(groupId)/analyze")
         var req = URLRequest(url: url)
-        req.httpMethod = "PATCH"
+        req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = ["segmentId": segmentId, "text": newText, "reanalyze": true]
+        var body: [String: Any] = [:]
+        if let sessionId, !sessionId.isEmpty {
+            body["sessionId"] = sessionId
+        }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, resp) = try await session.data(for: req)
         guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
-        struct PatchResp: Decodable { let card: QuestionCard? }
-        if let decoded = try? JSONDecoder().decode(PatchResp.self, from: data), let card = decoded.card {
+        struct AnalyzeResp: Decodable {
+            let card: QuestionCard?
+            let checkpoint: GroupCheckpoint?
+        }
+        let decoded = try JSONDecoder().decode(AnalyzeResp.self, from: data)
+        if let card = decoded.card {
             onQuestionCard?(card)
         }
+        if let cp = decoded.checkpoint {
+            onStageUpdated?(cp.currentStage, cp.currentStage, cp)
+        }
+        return (decoded.card, decoded.checkpoint)
     }
 
     /// HTTP catch-up upload of all queued offline/disconnected text segments.
-    public func flushPendingQueue(groupId: String) async {
+    public func flushPendingQueue(groupId: String, triggerAnalyze: Bool = false) async {
         guard !isOfflineMode else { return }
         let pending = await pendingQueue.allItems(forGroup: groupId)
         guard !pending.isEmpty else { return }
@@ -156,7 +185,7 @@ public final class CloudSyncClient: @unchecked Sendable {
         }
 
         do {
-            req.httpBody = try JSONEncoder().encode(BatchBody(segments: pending, triggerAnalyze: true))
+            req.httpBody = try JSONEncoder().encode(BatchBody(segments: pending, triggerAnalyze: triggerAnalyze))
             let (data, resp) = try await session.data(for: req)
             guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                 return
@@ -187,6 +216,16 @@ public final class CloudSyncClient: @unchecked Sendable {
     }
 
     // MARK: - REST Helpers
+
+    public func fetchHealth() async -> CloudHealthInfo? {
+        guard !isOfflineMode else { return nil }
+        let url = baseHTTPURL.appendingPathComponent("api/health")
+        guard let (data, resp) = try? await session.data(from: url),
+              let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(CloudHealthInfo.self, from: data)
+    }
 
     public func fetchGroups() async throws -> [CustomerGroup] {
         let url = baseHTTPURL.appendingPathComponent("api/groups")

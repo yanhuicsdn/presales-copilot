@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 import PreSalesIOSCore
 
 @MainActor
@@ -7,40 +8,84 @@ public final class IOSCopilotViewModel: ObservableObject {
     @Published public var groups: [CustomerGroup] = []
     @Published public var selectedGroupId: String?
     @Published public var checkpoint: GroupCheckpoint?
-    @Published public var segments: [TranscriptSegment] = []
-    @Published public var partialTranscript: String = ""
+    @Published public var capturedCount: Int = 0
     @Published public var latestCard: QuestionCard?
     @Published public var latestSummary: MeetingSummary?
     @Published public var showSummarySheet = false
 
     @Published public var isRecording = false
     @Published public var isPaused = false
+    @Published public var isTranscribing = false
+    @Published public var isAnalyzing = false
+    @Published public var unpromptedCount = 0
     @Published public var audioLevel: Float = 0
+
     @Published public var connectionState: CloudConnectionState = .disconnected
+    @Published public var activeModel: String = "DeepSeek"
+    @Published public var providerMode: String = "deepseek"
+
     @Published public var offlineMode = false {
         didSet {
             syncClient.isOfflineMode = offlineMode
+            setStatus(offlineMode ? "已开启涉密离线模式（文本仅本地暂存）" : "正在重连云端 Agent...")
             Task { await refreshPendingCount() }
         }
     }
+
+    @Published public var autoHintEnabled: Bool {
+        didSet { UserDefaults.standard.set(autoHintEnabled, forKey: Self.keyAutoHintEnabled) }
+    }
+    @Published public var autoHintThreshold: Int {
+        didSet {
+            let clamped = min(max(autoHintThreshold, 2), 15)
+            if clamped != autoHintThreshold {
+                autoHintThreshold = clamped
+                return
+            }
+            UserDefaults.standard.set(autoHintThreshold, forKey: Self.keyAutoHintThreshold)
+        }
+    }
+    @Published public var retainLocalAudioFile: Bool {
+        didSet { UserDefaults.standard.set(retainLocalAudioFile, forKey: Self.keyRetainLocalAudio) }
+    }
+    @Published public var cloudBaseURLString: String
     @Published public var speechMode: OnDeviceSpeechEngine.EngineMode = .unavailable("初始化中")
     @Published public var pendingQueueCount = 0
-    @Published public var retainLocalAudioFile = false
-    @Published public var cloudBaseURLString = "https://presales.88886666.site"
-    @Published public var statusErrorMessage: String?
+    @Published public var statusMessage: String = ""
+
+    private static let defaultCloudURL = "https://presales.88886666.site"
+    private static let keyCloudURL = "presales.ios.cloudBaseURL"
+    private static let keyAutoHintEnabled = "presales.ios.autoHintEnabled"
+    private static let keyAutoHintThreshold = "presales.ios.autoHintThreshold"
+    private static let keyRetainLocalAudio = "presales.ios.retainLocalAudio"
 
     private let audioManager = IOSAudioCaptureManager()
     private let speechEngine = OnDeviceSpeechEngine()
     private var syncClient: CloudSyncClient
     private var currentSessionId: String?
     private var nextSeq: Int = 1
+    private var unpromptedChars: Int = 0
+    private var clearStatusTask: Task<Void, Never>?
 
     public init() {
-        let initialURL = URL(string: "https://presales.88886666.site")!
+        let savedURL = UserDefaults.standard.string(forKey: Self.keyCloudURL) ?? Self.defaultCloudURL
+        let savedAutoHint = UserDefaults.standard.object(forKey: Self.keyAutoHintEnabled) as? Bool ?? false
+        let savedThreshold = UserDefaults.standard.object(forKey: Self.keyAutoHintThreshold) as? Int ?? 5
+        let savedRetain = UserDefaults.standard.object(forKey: Self.keyRetainLocalAudio) as? Bool ?? false
+
+        self.cloudBaseURLString = savedURL
+        self.autoHintEnabled = savedAutoHint
+        self.autoHintThreshold = min(max(savedThreshold, 2), 15)
+        self.retainLocalAudioFile = savedRetain
+
+        let initialURL = URL(string: savedURL) ?? URL(string: Self.defaultCloudURL)!
         self.syncClient = CloudSyncClient(baseHTTPURL: initialURL)
         wireCallbacks()
         speechMode = speechEngine.initialize()
-        Task { await refreshGroups() }
+        Task {
+            await fetchHealth()
+            await refreshGroups()
+        }
     }
 
     public var currentStage: StageCode {
@@ -48,20 +93,54 @@ public final class IOSCopilotViewModel: ObservableObject {
     }
 
     public var activeGroupName: String {
-        groups.first(where: { $0.id == selectedGroupId })?.name ?? "请选择客户分组"
+        groups.first(where: { $0.id == selectedGroupId })?.name ?? "选择客户分组"
+    }
+
+    public var confirmedBoundaryCount: Int {
+        checkpoint?.boundaries.confirmedCoreCount ?? 0
+    }
+
+    public var canRequestHint: Bool {
+        capturedCount > 0 && !isAnalyzing && !offlineMode && selectedGroupId != nil
+    }
+
+    public var isSpeechReady: Bool {
+        switch speechMode {
+        case .sherpaSenseVoice, .appleOnDeviceSpeech: return true
+        case .unavailable: return false
+        }
+    }
+
+    public func redetectSpeechEngine() {
+        speechMode = speechEngine.initialize()
+    }
+
+    public func fetchHealth() async {
+        guard !offlineMode else { return }
+        if let info = await syncClient.fetchHealth() {
+            if let mode = info.providerMode { providerMode = mode }
+            if let model = info.model, !model.isEmpty { activeModel = model }
+        }
     }
 
     public func updateCloudURL(_ urlString: String) {
-        guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            statusErrorMessage = "云端服务地址格式无效"
+        var cleaned = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        while cleaned.hasSuffix("/") { cleaned.removeLast() }
+        guard let url = URL(string: cleaned), !cleaned.isEmpty else {
+            setStatus("云端服务地址格式无效")
             return
         }
         cloudBaseURLString = url.absoluteString
+        UserDefaults.standard.set(cloudBaseURLString, forKey: Self.keyCloudURL)
         syncClient.baseHTTPURL = url
         if let gid = selectedGroupId, !offlineMode {
             syncClient.connect(groupId: gid)
         }
-        Task { await refreshGroups() }
+        Task {
+            await fetchHealth()
+            await refreshGroups()
+        }
+        setStatus("已切换云端服务地址")
     }
 
     public func refreshGroups() async {
@@ -73,49 +152,86 @@ public final class IOSCopilotViewModel: ObservableObject {
                 selectGroup(first.id)
             }
         } catch {
-            statusErrorMessage = "拉取客户分组失败：\(error.localizedDescription)"
+            setStatus("拉取客户分组失败：\(error.localizedDescription)")
         }
     }
 
-    public func createGroup(name: String, company: String, industry: String) async {
+    @discardableResult
+    public func createGroup(name: String, company: String, industry: String) async -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
         do {
-            let (group, cp) = try await syncClient.createGroup(name: name, company: company, industry: industry)
+            let (group, cp) = try await syncClient.createGroup(name: trimmed, company: company, industry: industry)
             groups.insert(group, at: 0)
             selectedGroupId = group.id
             checkpoint = cp
-            segments = []
+            capturedCount = 0
+            unpromptedCount = 0
+            unpromptedChars = 0
             latestCard = nil
+            latestSummary = nil
             nextSeq = 1
             syncClient.connect(groupId: group.id)
+            setStatus("已创建分组：\(group.name)")
+            return group.id
         } catch {
-            statusErrorMessage = "创建客户分组失败：\(error.localizedDescription)"
+            setStatus("创建客户分组失败：\(error.localizedDescription)")
+            return nil
         }
     }
 
     public func selectGroup(_ groupId: String) {
         selectedGroupId = groupId
         latestSummary = nil
+        unpromptedCount = 0
+        unpromptedChars = 0
         syncClient.connect(groupId: groupId)
         Task { await refreshPendingCount() }
     }
 
-    public func startOrResumeRecording() {
-        guard let groupId = selectedGroupId else {
-            statusErrorMessage = "请先选择或新建客户分组"
+    /// Mirrors Omarchy single-tap Record/Pause UX:
+    /// Auto-creates a default group if none is selected so recording works immediately.
+    public func toggleRecording() {
+        if isRecording {
+            pauseRecording()
             return
         }
+
+        if selectedGroupId == nil {
+            if offlineMode {
+                selectedGroupId = "grp_offline_\(UUID().uuidString.prefix(8))"
+                startRecordingInternal()
+            } else {
+                let df = DateFormatter()
+                df.dateFormat = "MM-dd HH:mm"
+                let defaultName = "现场会议 \(df.string(from: Date()))"
+                setStatus("正在自动创建会话分组...")
+                Task {
+                    if await createGroup(name: defaultName, company: "", industry: "") != nil {
+                        startRecordingInternal()
+                    }
+                }
+            }
+            return
+        }
+
+        startRecordingInternal()
+    }
+
+    private func startRecordingInternal() {
+        guard let groupId = selectedGroupId else { return }
 
         Task {
             let micGranted = await audioManager.requestMicrophonePermission()
             guard micGranted else {
-                statusErrorMessage = "未获得麦克风权限，请在 iOS 设置中开启"
+                setStatus("未获得麦克风权限，请在 iOS 设置中开启")
                 return
             }
 
             if case .appleOnDeviceSpeech = speechMode {
                 let speechGranted = await speechEngine.requestSpeechAuthorization()
                 if !speechGranted {
-                    statusErrorMessage = "未获得语音识别权限，仍可通过手动输入联调"
+                    setStatus("未获得语音识别权限，请在 iOS 设置中开启")
                 }
             }
 
@@ -129,13 +245,10 @@ public final class IOSCopilotViewModel: ObservableObject {
 
                 if case .appleOnDeviceSpeech = speechMode {
                     speechEngine.startAppleOnDeviceStream(
-                        onPartial: { [weak self] partial in
-                            Task { @MainActor in self?.partialTranscript = partial }
-                        },
+                        onPartial: { _ in },
                         onFinalSegment: { [weak self] text in
                             Task { @MainActor in
-                                self?.partialTranscript = ""
-                                self?.submitTranscriptText(text)
+                                self?.submitTranscriptSilently(text)
                             }
                         }
                     )
@@ -147,9 +260,13 @@ public final class IOSCopilotViewModel: ObservableObject {
                 }
                 isRecording = true
                 isPaused = false
-                _ = try? await syncClient.sendSessionControl(groupId: groupId, sessionId: currentSessionId, action: action)
+                setStatus("本地静默录音中（原始音频零上传）")
+
+                if !offlineMode {
+                    _ = try? await syncClient.sendSessionControl(groupId: groupId, sessionId: currentSessionId, action: action)
+                }
             } catch {
-                statusErrorMessage = error.localizedDescription
+                setStatus(error.localizedDescription)
             }
         }
     }
@@ -159,8 +276,8 @@ public final class IOSCopilotViewModel: ObservableObject {
         speechEngine.stopAppleOnDeviceStream()
         isRecording = false
         isPaused = true
-        partialTranscript = ""
-        if let groupId = selectedGroupId {
+        setStatus("已暂停录音")
+        if let groupId = selectedGroupId, !offlineMode {
             Task {
                 _ = try? await syncClient.sendSessionControl(groupId: groupId, sessionId: currentSessionId, action: "pause")
             }
@@ -172,31 +289,86 @@ public final class IOSCopilotViewModel: ObservableObject {
         speechEngine.stopAppleOnDeviceStream()
         isRecording = false
         isPaused = false
-        partialTranscript = ""
         guard let groupId = selectedGroupId else { return }
+        if offlineMode {
+            setStatus("离线模式下请联网后生成云端结构化纪要")
+            return
+        }
         let sid = currentSessionId
         currentSessionId = nil
+        setStatus("正在生成结构化沟通纪要...")
         Task {
             do {
                 if let summary = try await syncClient.sendSessionControl(groupId: groupId, sessionId: sid, action: "end") {
                     latestSummary = summary
                     showSummarySheet = true
+                    setStatus("结构化纪要已生成")
                 }
             } catch {
-                statusErrorMessage = "生成结构化纪要失败：\(error.localizedDescription)"
+                setStatus("生成纪要失败：\(error.localizedDescription)")
             }
         }
+    }
+
+    /// On-demand button action ("获取提问建议"), identical to Omarchy `Backend::requestHint()`.
+    public func requestHint() {
+        guard let groupId = selectedGroupId else {
+            setStatus("请先开始录音或选择客户分组")
+            return
+        }
+        guard !offlineMode else {
+            setStatus("涉密离线模式中，联网后可获取云端建议")
+            return
+        }
+        guard capturedCount > 0 else {
+            setStatus("尚未采集到对话内容")
+            return
+        }
+        guard !isAnalyzing else { return }
+
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        isAnalyzing = true
+        unpromptedCount = 0
+        unpromptedChars = 0
+        setStatus("正在提炼简短提词...")
+
+        let sid = currentSessionId
+        Task {
+            do {
+                let (card, cp) = try await syncClient.requestHint(groupId: groupId, sessionId: sid)
+                if let card {
+                    latestCard = card
+                    isAnalyzing = false
+                    setStatus("")
+                }
+                if let cp {
+                    checkpoint = cp
+                }
+            } catch {
+                isAnalyzing = false
+                setStatus("获取提词失败：\(error.localizedDescription)")
+            }
+        }
+    }
+
+    public func copyText(_ text: String) {
+        guard !text.isEmpty else { return }
+        UIPasteboard.general.string = text
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        setStatus("已复制到剪贴板")
     }
 
     public func deleteLastLocalRecording() {
         do {
             try audioManager.deleteLastLocalRecording()
+            setStatus("已删除本机原始录音")
         } catch {
-            statusErrorMessage = "删除本地录音失败：\(error.localizedDescription)"
+            setStatus("删除本地录音失败：\(error.localizedDescription)")
         }
     }
 
-    public func submitTranscriptText(_ text: String, startedAt: Int64? = nil, endedAt: Int64? = nil) {
+    /// Silently uploads transcribed speech without spamming prompts on every sentence.
+    public func submitTranscriptSilently(_ text: String, startedAt: Int64? = nil, endedAt: Int64? = nil) {
         guard let groupId = selectedGroupId else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -216,32 +388,36 @@ public final class IOSCopilotViewModel: ObservableObject {
             isFinal: true
         )
 
-        let localSeg = TranscriptSegment(
-            id: outgoing.segmentId,
-            groupId: groupId,
-            sessionId: sid,
-            seq: seq,
-            text: trimmed,
-            startedAt: outgoing.startedAt,
-            endedAt: outgoing.endedAt,
-            createdAt: now
-        )
-        segments.append(localSeg)
+        capturedCount += 1
+        unpromptedCount += 1
+        unpromptedChars += trimmed.count
+
+        let shouldAutoTrigger = !offlineMode &&
+            autoHintEnabled &&
+            unpromptedCount >= autoHintThreshold &&
+            unpromptedChars >= 60
+
+        if shouldAutoTrigger {
+            isAnalyzing = true
+            unpromptedCount = 0
+            unpromptedChars = 0
+        }
 
         Task {
-            await syncClient.sendSegment(outgoing)
+            await syncClient.sendSegment(outgoing, autoAnalyze: shouldAutoTrigger)
             await refreshPendingCount()
         }
     }
 
-    public func editSegment(segmentId: String, newText: String) {
-        guard let groupId = selectedGroupId else { return }
-        if let idx = segments.firstIndex(where: { $0.id == segmentId }) {
-            segments[idx].text = newText
-            segments[idx].edited = true
-        }
-        Task {
-            try? await syncClient.editSegment(groupId: groupId, segmentId: segmentId, newText: newText)
+    private func setStatus(_ msg: String) {
+        statusMessage = msg
+        clearStatusTask?.cancel()
+        guard !msg.isEmpty else { return }
+        clearStatusTask = Task {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if !Task.isCancelled && self.statusMessage == msg {
+                self.statusMessage = ""
+            }
         }
     }
 
@@ -263,9 +439,12 @@ public final class IOSCopilotViewModel: ObservableObject {
         audioManager.onSpeechChunk = { [weak self] chunk in
             guard let self else { return }
             Task {
-                if let text = await self.speechEngine.transcribeSherpaChunk(samples: chunk.samples, sampleRate: 16_000) {
-                    await MainActor.run {
-                        self.submitTranscriptText(text, startedAt: chunk.startedAtMs, endedAt: chunk.endedAtMs)
+                await MainActor.run { self.isTranscribing = true }
+                let text = await self.speechEngine.transcribeSherpaChunk(samples: chunk.samples, sampleRate: 16_000)
+                await MainActor.run {
+                    self.isTranscribing = false
+                    if let text {
+                        self.submitTranscriptSilently(text, startedAt: chunk.startedAtMs, endedAt: chunk.endedAtMs)
                     }
                 }
             }
@@ -276,7 +455,7 @@ public final class IOSCopilotViewModel: ObservableObject {
                 if began {
                     self?.isRecording = false
                     self?.isPaused = true
-                    self?.statusErrorMessage = "检测到通话或系统打断，录音已自动暂停，可随时点击继续"
+                    self?.setStatus("通话/系统打断，录音已暂停，可点击继续")
                 }
             }
         }
@@ -288,7 +467,7 @@ public final class IOSCopilotViewModel: ObservableObject {
         syncClient.onSnapshot = { [weak self] group, cp, segs, card, _ in
             Task { @MainActor in
                 self?.checkpoint = cp
-                self?.segments = segs
+                self?.capturedCount = segs.count
                 self?.latestCard = card
                 self?.nextSeq = max(group.nextExpectedSeq, (segs.last?.seq ?? 0) + 1)
                 await self?.refreshPendingCount()
@@ -296,7 +475,11 @@ public final class IOSCopilotViewModel: ObservableObject {
         }
 
         syncClient.onQuestionCard = { [weak self] card in
-            Task { @MainActor in self?.latestCard = card }
+            Task { @MainActor in
+                self?.isAnalyzing = false
+                self?.latestCard = card
+                self?.statusMessage = ""
+            }
         }
 
         syncClient.onStageUpdated = { [weak self] _, _, cp in
@@ -318,7 +501,10 @@ public final class IOSCopilotViewModel: ObservableObject {
         }
 
         syncClient.onError = { [weak self] msg in
-            Task { @MainActor in self?.statusErrorMessage = msg }
+            Task { @MainActor in
+                self?.isAnalyzing = false
+                self?.setStatus(msg)
+            }
         }
     }
 }

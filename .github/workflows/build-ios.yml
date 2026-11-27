@@ -100,9 +100,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="ios-v1.0.${{ github.run_number }}"
+          TAG="ios-v2.0.${{ github.run_number }}"
           gh release create "${TAG}" \
             ios/dist/PreSalesCopilot-iOS-arm64.ipa \
             ios/dist/PreSalesCopilot-iOS-Simulator.zip \
-            --title "PreSales Copilot iOS v1.0.${{ github.run_number }}" \
-            --notes "iOS 17+ (iPhone & iPad) 原生客户端构建产物（已默认连接线上云端 https://presales.88886666.site）。包含未签名真机包 .ipa（支持 AltStore/SideStore/Sideloadly/Xcode 签名安装）与模拟器包。"
+            --title "PreSales Copilot iOS v2.0.${{ github.run_number }} (Omarchy极简按需提词版)" \
+            --notes "iOS 17+ (iPhone & iPad) 原生客户端 V2.0（与 Omarchy 客户端完全对齐）：极简深色单栏提词界面、后台端侧静默转写不刷屏、一键录音自动建组、底部拇指区「获取提问建议」按需调用线上 V3.0 FDE 12大Skill 引擎（https://presales.88886666.site）。包含未签名真机 .ipa 与模拟器包。"

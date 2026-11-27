@@ -102,4 +102,25 @@ final class PreSalesCoreTests: XCTestCase {
         XCTAssertEqual(envelope.card?.stage, .S1)
         XCTAssertEqual(envelope.card?.alternativeQuestions.count, 3)
     }
+
+    func testV3FDESkillsAndBoundariesAndDelta() {
+        XCTAssertEqual(SkillDisplayNames.label(for: "ai_vs_engineering_triage"), "AI与常规工程分诊")
+        XCTAssertEqual(SkillDisplayNames.label(for: "honest_boundary_defer"), "坦诚划界与验证后置")
+        XCTAssertEqual(SkillDisplayNames.label(for: "prototype_and_sample_anchor"), "脱敏样例与存量改造锚定")
+
+        let b = BoundaryConstraints(
+            dataLocation: "政务云",
+            networkType: "纯内网",
+            dataVolume: nil,
+            terminalType: "PC端",
+            confidentiality: nil,
+            historicalDataStatus: "18000条地址混乱",
+            systemConstraints: "60秒超时"
+        )
+        XCTAssertEqual(b.confirmedCoreCount, 3)
+        XCTAssertEqual(
+            SherpaSenseVoiceEngine.extractDelta(fullText: "第一句。第二句。", committed: "第一句。"),
+            "第二句。"
+        )
+    }
 }
