@@ -10,12 +10,18 @@ cloud/data/
 .env.local
 *.log
 
-# Swift / macOS
+# Swift / macOS / iOS
 macos/.build/
 macos/.swiftpm/
 macos/Frameworks/
 macos/*.xcodeproj/
 macos/build/
 macos/dist/
+ios/.build/
+ios/.swiftpm/
+ios/*.xcodeproj/
+ios/build/
+ios/dist/
 *.dmg
+*.ipa
 .DS_Store

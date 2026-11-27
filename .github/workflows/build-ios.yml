@@ -1,0 +1,106 @@
+name: Build iOS App (iPhone & iPad)
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/build-ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios:
+    name: Test & Build PreSalesCopilotIOS (iOS 17+ arm64)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Select available iPhone Simulator & run XCTest suite
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          SIM_ID=$(xcrun simctl list devices available iPhone -j | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          for runtime, devs in sorted(data.get('devices', {}).items(), reverse=True):
+              for d in devs:
+                  if d.get('isAvailable') and 'iPhone' in d.get('name', ''):
+                      print(d['udid'])
+                      sys.exit(0)
+          ")
+          echo "Using iOS Simulator UDID: ${SIM_ID}"
+          xcodebuild test \
+            -project PreSalesCopilotIOS.xcodeproj \
+            -scheme PreSalesCopilotIOS \
+            -destination "platform=iOS Simulator,id=${SIM_ID}" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build iOS arm64 Device Release App & Unsigned IPA
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project PreSalesCopilotIOS.xcodeproj \
+            -scheme PreSalesCopilotIOS \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/device \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+          mkdir -p dist/Payload
+          cp -R build/device/Build/Products/Release-iphoneos/PreSalesCopilotIOS.app dist/Payload/
+          (cd dist && zip -qr PreSalesCopilot-iOS-arm64.ipa Payload)
+          rm -rf dist/Payload
+          ls -lh dist/
+
+      - name: Build iOS Simulator App Bundle
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project PreSalesCopilotIOS.xcodeproj \
+            -scheme PreSalesCopilotIOS \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build/sim \
+            CODE_SIGNING_ALLOWED=NO
+
+          (cd build/sim/Build/Products/Release-iphonesimulator && ditto -c -k --sequesterRsrc --keepParent PreSalesCopilotIOS.app ../../../../dist/PreSalesCopilot-iOS-Simulator.zip)
+          ls -lh dist/
+
+      - name: Upload iOS Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PreSalesCopilot-iOS
+          path: |
+            ios/dist/PreSalesCopilot-iOS-arm64.ipa
+            ios/dist/PreSalesCopilot-iOS-Simulator.zip
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="ios-v1.0.${{ github.run_number }}"
+          gh release create "${TAG}" \
+            ios/dist/PreSalesCopilot-iOS-arm64.ipa \
+            ios/dist/PreSalesCopilot-iOS-Simulator.zip \
+            --title "PreSales Copilot iOS v1.0.${{ github.run_number }}" \
+            --notes "iOS 17+ (iPhone & iPad) 原生客户端构建产物（已默认连接线上云端 https://presales.88886666.site）。包含未签名真机包 .ipa（支持 AltStore/SideStore/Sideloadly/Xcode 签名安装）与模拟器包。"

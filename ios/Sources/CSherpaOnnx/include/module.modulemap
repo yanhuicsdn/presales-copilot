@@ -1,0 +1,4 @@
+module CSherpaOnnxIOS {
+    header "c-api-bridge.h"
+    export *
+}
