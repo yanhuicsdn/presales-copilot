@@ -1,7 +1,6 @@
 import Foundation
 #if os(macOS)
 import AVFoundation
-import IOKit.pwr_mgt
 #endif
 
 /// Native macOS audio capture built on AVAudioEngine.
@@ -37,8 +36,7 @@ public final class AudioCaptureManager {
     #if os(macOS)
     private let audioEngine = AVAudioEngine()
     private var localAudioFile: AVAudioFile?
-    private var sleepAssertionID: IOPMAssertionID = 0
-    private var hasSleepAssertion = false
+    private var sleepActivityToken: NSObjectProtocol?
     #endif
 
     public init(vadConfig: VADChunker.Config = VADChunker.Config()) {
@@ -178,21 +176,18 @@ public final class AudioCaptureManager {
 
     #if os(macOS)
     private func acquirePreventSleepAssertion() {
-        guard !hasSleepAssertion else { return }
-        let reason = "售前智问分身正在进行本地实时语音转写" as CFString
-        let result = IOPMAssertionCreateWithName(
-            kIOPMAssertionTypeNoIdleSystemSleep as CFString,
-            IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            reason,
-            &sleepAssertionID
+        guard sleepActivityToken == nil else { return }
+        sleepActivityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.idleSystemSleepDisabled, .userInitiated],
+            reason: "售前智问分身正在进行本地实时语音转写"
         )
-        hasSleepAssertion = (result == kIOReturnSuccess)
     }
 
     private func releasePreventSleepAssertion() {
-        guard hasSleepAssertion else { return }
-        IOPMAssertionRelease(sleepAssertionID)
-        hasSleepAssertion = false
+        if let token = sleepActivityToken {
+            ProcessInfo.processInfo.endActivity(token)
+            sleepActivityToken = nil
+        }
     }
     #endif
 }

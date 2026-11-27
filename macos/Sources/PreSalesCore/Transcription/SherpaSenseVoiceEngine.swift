@@ -89,15 +89,20 @@ public final class SherpaSenseVoiceEngine {
         status = .unloaded
     }
 
+    private struct SendableHandleBox: @unchecked Sendable {
+        let ptr: OpaquePointer
+    }
+
     /// Runs local int8 SenseVoice inference on a 16kHz mono Float32 PCM buffer.
     /// Returns recognized Chinese text with automatic punctuation (ITN), or nil if silence.
     public func transcribe(samples: [Float], sampleRate: Int = 16_000) async -> String? {
         guard let h = handle, !samples.isEmpty else { return nil }
+        let box = SendableHandleBox(ptr: h)
         return await withCheckedContinuation { continuation in
             inferenceQueue.async {
                 let text: String? = samples.withUnsafeBufferPointer { buf in
                     guard let base = buf.baseAddress else { return nil }
-                    guard let rawPtr = presales_sherpa_transcribe_pcm(h, base, Int32(buf.count), Int32(sampleRate)) else {
+                    guard let rawPtr = presales_sherpa_transcribe_pcm(box.ptr, base, Int32(buf.count), Int32(sampleRate)) else {
                         return nil
                     }
                     defer { presales_sherpa_free_text(rawPtr) }
