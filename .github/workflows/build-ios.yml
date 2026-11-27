@@ -72,6 +72,7 @@ jobs:
         working-directory: ios
         run: |
           set -euo pipefail
+          OUT_ZIP="$(pwd)/dist/PreSalesCopilot-iOS-Simulator.zip"
           xcodebuild build \
             -project PreSalesCopilotIOS.xcodeproj \
             -scheme PreSalesCopilotIOS \
@@ -81,7 +82,8 @@ jobs:
             -derivedDataPath build/sim \
             CODE_SIGNING_ALLOWED=NO
 
-          (cd build/sim/Build/Products/Release-iphonesimulator && ditto -c -k --sequesterRsrc --keepParent PreSalesCopilotIOS.app ../../../../dist/PreSalesCopilot-iOS-Simulator.zip)
+          mkdir -p dist
+          (cd build/sim/Build/Products/Release-iphonesimulator && ditto -c -k --sequesterRsrc --keepParent PreSalesCopilotIOS.app "${OUT_ZIP}")
           ls -lh dist/
 
       - name: Upload iOS Build Artifacts
